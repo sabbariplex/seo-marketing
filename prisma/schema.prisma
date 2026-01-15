@@ -69,7 +69,7 @@ model Client {
   website       String?
   userId        String    // Agency user who owns this client
   user          User      @relation("AgencyClients", fields: [userId], references: [id], onDelete: Cascade)
-  clientUserId  String?   // Client user who can access this client's data
+  clientUserId  String?   @unique // Client user who can access this client's data
   clientUser    User?     @relation("ClientUser", fields: [clientUserId], references: [id], onDelete: SetNull)
   inviteToken   String?   @unique // Token for client invitation
   inviteExpires DateTime? // When invite expires
