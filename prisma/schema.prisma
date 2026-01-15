@@ -1,0 +1,182 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  role          String    @default("agency") // "agency" or "client"
+  clientId      String?   // If role is "client", link to Client
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  clients       Client[]  @relation("AgencyClients")
+  client        Client?   @relation("ClientUser")
+  dashboards    Dashboard[]
+  reports       Report[]
+  integrations  Integration[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  name          String
+  email         String?
+  website       String?
+  userId        String    // Agency user who owns this client
+  user          User      @relation("AgencyClients", fields: [userId], references: [id], onDelete: Cascade)
+  clientUserId  String?   // Client user who can access this client's data
+  clientUser    User?     @relation("ClientUser", fields: [clientUserId], references: [id], onDelete: SetNull)
+  inviteToken   String?   @unique // Token for client invitation
+  inviteExpires DateTime? // When invite expires
+  hasAccess     Boolean   @default(false) // Whether client has been granted access
+  projects      Project[]
+  dashboards    Dashboard[]
+  reports       Report[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  website       String?
+  dashboards    Dashboard[]
+  reports       Report[]
+  integrations  Integration[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Dashboard {
+  id            String    @id @default(cuid())
+  name          String
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  layout        Json?     // Store widget positions and configuration
+  isDefault     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Report {
+  id            String    @id @default(cuid())
+  name          String
+  type          String    // "daily", "weekly", "monthly", "custom"
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  template      Json      // Report template configuration
+  generatedAt   DateTime?
+  fileUrl       String?   // URL to generated PDF/HTML
+  schedules     ReportSchedule[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model ReportSchedule {
+  id            String    @id @default(cuid())
+  reportId      String
+  report        Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  frequency     String    // "daily", "weekly", "monthly"
+  dayOfWeek     Int?      // 0-6 for weekly
+  dayOfMonth    Int?      // 1-31 for monthly
+  time          String    // HH:mm format
+  recipients    String[]  // Email addresses
+  isActive      Boolean   @default(true)
+  lastSent      DateTime?
+  nextRun       DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Branding {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  logoUrl       String?
+  primaryColor  String?   @default("#3b82f6")
+  secondaryColor String? @default("#1e40af")
+  companyName   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Integration {
+  id            String    @id @default(cuid())
+  type          String    // "google_analytics", "search_console", "ahrefs", "semrush", "moz"
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  credentials   Json      // Encrypted API keys/tokens
+  isConnected   Boolean   @default(false)
+  lastSync      DateTime?
+  settings      Json?     // Additional integration settings
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model MetricSnapshot {
+  id            String    @id @default(cuid())
+  projectId     String
+  metricType    String    // "traffic", "rankings", "backlinks", "pagespeed", "conversions"
+  data          Json      // Metric data
+  date          DateTime
+  createdAt     DateTime  @default(now())
+  
+  @@index([projectId, metricType, date])
+  @@index([date])
+}
