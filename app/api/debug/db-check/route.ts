@@ -1,62 +1,164 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 
 export async function GET() {
-  console.log('[DB CHECK] Diagnostic endpoint called')
-  
-  // Force Prisma initialization by trying to access it
-  let prismaInstance: any = null
-  let prismaError: any = null
-  
-  try {
-    // Try to access prisma to trigger initialization
-    if (prisma) {
-      // Try to access a property to trigger Proxy getter
-      prismaInstance = prisma
-      // Try to check if it has user property (this will trigger initialization)
-      if (typeof prisma === 'object' && 'user' in prisma) {
-        prismaInstance = prisma
-      }
-    }
-  } catch (error: any) {
-    prismaError = {
-      message: error.message,
-      stack: error.stack,
-    }
-    console.error('[DB CHECK] Error accessing prisma:', error.message)
-  }
+  console.log('[DB CHECK] ========== Diagnostic endpoint called ==========')
   
   const diagnostics: any = {
     timestamp: new Date().toISOString(),
-    hasDatabaseUrl: !!process.env.DATABASE_URL,
-    databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'Not set',
-    hasPrisma: !!prismaInstance,
-    prismaType: typeof prismaInstance,
-    prismaIsNull: prismaInstance === null,
-    prismaIsUndefined: prismaInstance === undefined,
-    prismaError: prismaError,
-    nodeEnv: process.env.NODE_ENV,
-    nextRuntime: process.env.NEXT_RUNTIME,
-    nextPhase: process.env.NEXT_PHASE,
-    isServer: typeof window === 'undefined',
+    environment: {
+      nodeEnv: process.env.NODE_ENV,
+      vercel: process.env.VERCEL,
+      nextRuntime: process.env.NEXT_RUNTIME,
+      nextPhase: process.env.NEXT_PHASE,
+      isServer: typeof window === 'undefined',
+    },
+    database: {
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 50) + '...' : 'Not set',
+      databaseUrlLength: process.env.DATABASE_URL?.length || 0,
+      databaseUrlContainsPostgres: process.env.DATABASE_URL?.includes('postgres') || false,
+      databaseUrlContainsSupabase: process.env.DATABASE_URL?.includes('supabase') || false,
+    },
+    prisma: {} as any,
   }
 
-  // Try to connect to database
+  // Step 1: Check if Prisma module can be imported
+  let prismaModule: any = null
+  let importError: any = null
+  try {
+    console.log('[DB CHECK] [1/6] Attempting to import Prisma module...')
+    prismaModule = await import('@/lib/prisma')
+    console.log('[DB CHECK] [1/6] ✓ Prisma module imported successfully')
+    diagnostics.prisma.moduleImported = true
+    diagnostics.prisma.moduleExports = Object.keys(prismaModule || {})
+  } catch (error: any) {
+    importError = {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    }
+    console.error('[DB CHECK] [1/6] ✗ Failed to import Prisma module:', error.message)
+    diagnostics.prisma.moduleImported = false
+    diagnostics.prisma.importError = importError
+    return NextResponse.json(diagnostics, { status: 200 })
+  }
+
+  // Step 2: Check if prisma export exists
+  let prismaInstance: any = null
+  let prismaAccessError: any = null
+  try {
+    console.log('[DB CHECK] [2/6] Checking if prisma export exists...')
+    if (prismaModule && 'prisma' in prismaModule) {
+      prismaInstance = prismaModule.prisma
+      console.log('[DB CHECK] [2/6] ✓ Prisma export found')
+      diagnostics.prisma.exportExists = true
+      diagnostics.prisma.exportType = typeof prismaInstance
+      diagnostics.prisma.exportIsNull = prismaInstance === null
+      diagnostics.prisma.exportIsUndefined = prismaInstance === undefined
+    } else {
+      console.error('[DB CHECK] [2/6] ✗ Prisma export not found in module')
+      diagnostics.prisma.exportExists = false
+      diagnostics.prisma.availableExports = Object.keys(prismaModule || {})
+    }
+  } catch (error: any) {
+    prismaAccessError = {
+      message: error.message,
+      stack: error.stack,
+    }
+    console.error('[DB CHECK] [2/6] ✗ Error accessing prisma export:', error.message)
+    diagnostics.prisma.exportExists = false
+    diagnostics.prisma.accessError = prismaAccessError
+  }
+
+  // Step 3: Inspect Prisma Client structure
   if (prismaInstance) {
-    console.log('[DB CHECK] Prisma is available, testing connection...')
     try {
-      // Try a simple query
-      console.log('[DB CHECK] Executing user.count()...')
-      const userCount = await prismaInstance.user.count()
-      console.log('[DB CHECK] ✓ Database query successful, user count:', userCount)
+      console.log('[DB CHECK] [3/6] Inspecting Prisma Client structure...')
+      const prismaKeys = Object.keys(prismaInstance).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+      diagnostics.prisma.clientKeys = prismaKeys
+      diagnostics.prisma.hasUserModel = 'user' in prismaInstance
+      diagnostics.prisma.hasAccountModel = 'account' in prismaInstance
+      diagnostics.prisma.hasSessionModel = 'session' in prismaInstance
       
+      if ('user' in prismaInstance) {
+        const userModel = prismaInstance.user
+        diagnostics.prisma.userModelType = typeof userModel
+        diagnostics.prisma.userModelKeys = typeof userModel === 'object' ? Object.keys(userModel || {}) : []
+        diagnostics.prisma.hasUserCount = typeof userModel?.count === 'function'
+        diagnostics.prisma.hasUserFindMany = typeof userModel?.findMany === 'function'
+        console.log('[DB CHECK] [3/6] ✓ Prisma Client structure inspected')
+        console.log('[DB CHECK] [3/6] User model available:', diagnostics.prisma.hasUserModel)
+        console.log('[DB CHECK] [3/6] User model has count():', diagnostics.prisma.hasUserCount)
+      } else {
+        console.warn('[DB CHECK] [3/6] ⚠ User model not found in Prisma Client')
+      }
+    } catch (error: any) {
+      console.error('[DB CHECK] [3/6] ✗ Error inspecting Prisma Client:', error.message)
+      diagnostics.prisma.inspectionError = {
+        message: error.message,
+        stack: error.stack,
+      }
+    }
+  }
+
+  // Step 4: Test database connection with $connect
+  if (prismaInstance) {
+    try {
+      console.log('[DB CHECK] [4/6] Testing database connection with $connect()...')
+      if (typeof prismaInstance.$connect === 'function') {
+        await prismaInstance.$connect()
+        console.log('[DB CHECK] [4/6] ✓ Database connection successful')
+        diagnostics.prisma.connectionTest = 'success'
+      } else {
+        console.warn('[DB CHECK] [4/6] ⚠ $connect() method not available')
+        diagnostics.prisma.connectionTest = 'method_not_available'
+      }
+    } catch (error: any) {
+      console.error('[DB CHECK] [4/6] ✗ Database connection failed:', error.message)
+      diagnostics.prisma.connectionTest = 'failed'
+      diagnostics.prisma.connectionError = {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+      }
+    }
+  }
+
+  // Step 5: Test simple query (user.count)
+  if (prismaInstance && diagnostics.prisma.hasUserCount) {
+    try {
+      console.log('[DB CHECK] [5/6] Testing user.count() query...')
+      const userCount = await prismaInstance.user.count()
+      console.log('[DB CHECK] [5/6] ✓ user.count() successful, count:', userCount)
       diagnostics.databaseConnected = true
       diagnostics.userCount = userCount
-      
-      // Try to list users
-      console.log('[DB CHECK] Fetching sample users...')
+      diagnostics.prisma.queryTest = 'success'
+    } catch (error: any) {
+      console.error('[DB CHECK] [5/6] ✗ user.count() query failed:', error.message)
+      diagnostics.databaseConnected = false
+      diagnostics.prisma.queryTest = 'failed'
+      diagnostics.prisma.queryError = {
+        message: error.message,
+        code: error.code,
+        stack: error.stack,
+        errorName: error.name,
+      }
+    }
+  } else {
+    console.warn('[DB CHECK] [5/6] ⚠ Skipping user.count() - method not available')
+    diagnostics.databaseConnected = false
+    diagnostics.prisma.queryTest = 'skipped'
+    diagnostics.prisma.querySkipReason = diagnostics.prisma.hasUserCount 
+      ? 'Prisma instance not available' 
+      : 'user.count() method not available'
+  }
+
+  // Step 6: Test findMany query
+  if (diagnostics.databaseConnected && diagnostics.prisma.hasUserFindMany) {
+    try {
+      console.log('[DB CHECK] [6/6] Testing user.findMany() query...')
       const users = await prismaInstance.user.findMany({
-        take: 10,
+        take: 5,
         select: {
           id: true,
           email: true,
@@ -67,31 +169,59 @@ export async function GET() {
           createdAt: 'desc'
         }
       })
+      console.log('[DB CHECK] [6/6] ✓ user.findMany() successful, found', users.length, 'users')
       diagnostics.sampleUsers = users
-      console.log('[DB CHECK] ✓ Found', users.length, 'users')
       
-      // Check accounts
-      const accountCount = await prismaInstance.account.count()
-      diagnostics.accountCount = accountCount
-      
-      // Check sessions
-      const sessionCount = await prismaInstance.session.count()
-      diagnostics.sessionCount = sessionCount
-      
+      // Additional counts
+      if (diagnostics.prisma.hasAccountModel && typeof prismaInstance.account?.count === 'function') {
+        diagnostics.accountCount = await prismaInstance.account.count()
+      }
+      if (diagnostics.prisma.hasSessionModel && typeof prismaInstance.session?.count === 'function') {
+        diagnostics.sessionCount = await prismaInstance.session.count()
+      }
     } catch (error: any) {
-      console.error('[DB CHECK] ✗ Database query failed:', error.message)
-      diagnostics.databaseConnected = false
-      diagnostics.databaseError = error.message
-      diagnostics.errorStack = error.stack
-      diagnostics.errorCode = error.code
+      console.error('[DB CHECK] [6/6] ✗ user.findMany() query failed:', error.message)
+      diagnostics.findManyError = {
+        message: error.message,
+        code: error.code,
+      }
     }
   } else {
-    console.warn('[DB CHECK] ⚠ Prisma client is null')
-    diagnostics.databaseConnected = false
-    diagnostics.error = 'Prisma client is null'
-    diagnostics.reason = 'Prisma was not initialized - check DATABASE_URL and initialization logs'
+    console.warn('[DB CHECK] [6/6] ⚠ Skipping user.findMany() - previous steps failed')
   }
 
-  console.log('[DB CHECK] Diagnostics complete:', diagnostics)
+  // Summary
+  diagnostics.summary = {
+    databaseConnected: diagnostics.databaseConnected || false,
+    prismaInitialized: !!prismaInstance,
+    canQueryDatabase: diagnostics.databaseConnected && diagnostics.prisma.queryTest === 'success',
+    issues: [] as string[],
+  }
+
+  if (!diagnostics.database.hasDatabaseUrl) {
+    diagnostics.summary.issues.push('DATABASE_URL environment variable is not set')
+  }
+  if (!diagnostics.prisma.moduleImported) {
+    diagnostics.summary.issues.push('Failed to import Prisma module')
+  }
+  if (!diagnostics.prisma.exportExists) {
+    diagnostics.summary.issues.push('Prisma export not found in module')
+  }
+  if (!diagnostics.prisma.hasUserModel) {
+    diagnostics.summary.issues.push('User model not found in Prisma Client')
+  }
+  if (!diagnostics.prisma.hasUserCount) {
+    diagnostics.summary.issues.push('user.count() method not available')
+  }
+  if (diagnostics.prisma.connectionTest === 'failed') {
+    diagnostics.summary.issues.push('Database connection failed')
+  }
+  if (diagnostics.prisma.queryTest === 'failed') {
+    diagnostics.summary.issues.push('Database query failed')
+  }
+
+  console.log('[DB CHECK] ========== Diagnostics complete ==========')
+  console.log('[DB CHECK] Summary:', diagnostics.summary)
+  
   return NextResponse.json(diagnostics, { status: 200 })
 }

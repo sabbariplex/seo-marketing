@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/check-env.js && prisma generate && next build",
+    "build": "node scripts/check-env.js && prisma generate && node scripts/verify-prisma.js && next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "verify-prisma": "node scripts/verify-prisma.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
