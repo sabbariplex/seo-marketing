@@ -27,10 +27,19 @@ export async function GET() {
   let importError: any = null
   try {
     console.log('[DB CHECK] [1/6] Attempting to import Prisma module...')
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:30',message:'Before Prisma module import',data:{nodeEnv:process.env.NODE_ENV,isServer:typeof window === 'undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     prismaModule = await import('@/lib/prisma')
     console.log('[DB CHECK] [1/6] ✓ Prisma module imported successfully')
     diagnostics.prisma.moduleImported = true
     diagnostics.prisma.moduleExports = Object.keys(prismaModule || {})
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:33',message:'After Prisma module import',data:{moduleExports:Object.keys(prismaModule||{}),hasPrisma:'prisma' in prismaModule},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
   } catch (error: any) {
     importError = {
       message: error.message,
@@ -40,6 +49,11 @@ export async function GET() {
     console.error('[DB CHECK] [1/6] ✗ Failed to import Prisma module:', error.message)
     diagnostics.prisma.moduleImported = false
     diagnostics.prisma.importError = importError
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:42',message:'Prisma module import failed',data:{errorMessage:error.message,errorName:error.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     return NextResponse.json(diagnostics, { status: 200 })
   }
 
@@ -55,10 +69,18 @@ export async function GET() {
       diagnostics.prisma.exportType = typeof prismaInstance
       diagnostics.prisma.exportIsNull = prismaInstance === null
       diagnostics.prisma.exportIsUndefined = prismaInstance === undefined
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:52',message:'Prisma instance extracted',data:{exportType:typeof prismaInstance,isNull:prismaInstance===null,isUndefined:prismaInstance===undefined,hasUser:'user' in prismaInstance},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     } else {
       console.error('[DB CHECK] [2/6] ✗ Prisma export not found in module')
       diagnostics.prisma.exportExists = false
       diagnostics.prisma.availableExports = Object.keys(prismaModule || {})
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:59',message:'Prisma export not found',data:{availableExports:Object.keys(prismaModule||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     }
   } catch (error: any) {
     prismaAccessError = {
@@ -68,6 +90,10 @@ export async function GET() {
     console.error('[DB CHECK] [2/6] ✗ Error accessing prisma export:', error.message)
     diagnostics.prisma.exportExists = false
     diagnostics.prisma.accessError = prismaAccessError
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:68',message:'Error accessing prisma export',data:{errorMessage:error.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
   }
 
   // Step 3: Inspect Prisma Client structure
@@ -89,8 +115,16 @@ export async function GET() {
         console.log('[DB CHECK] [3/6] ✓ Prisma Client structure inspected')
         console.log('[DB CHECK] [3/6] User model available:', diagnostics.prisma.hasUserModel)
         console.log('[DB CHECK] [3/6] User model has count():', diagnostics.prisma.hasUserCount)
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:84',message:'User model inspection in route',data:{userModelType:typeof userModel,hasCount:typeof userModel?.count === 'function',hasFindMany:typeof userModel?.findMany === 'function',userModelKeys:diagnostics.prisma.userModelKeys.slice(0,20)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
       } else {
         console.warn('[DB CHECK] [3/6] ⚠ User model not found in Prisma Client')
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:93',message:'User model not found in route',data:{clientKeys:diagnostics.prisma.clientKeys.slice(0,10)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
       }
     } catch (error: any) {
       console.error('[DB CHECK] [3/6] ✗ Error inspecting Prisma Client:', error.message)
@@ -128,11 +162,20 @@ export async function GET() {
   if (prismaInstance && diagnostics.prisma.hasUserCount) {
     try {
       console.log('[DB CHECK] [5/6] Testing user.count() query...')
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:130',message:'Before user.count() call',data:{hasPrismaInstance:!!prismaInstance,hasUserCount:diagnostics.prisma.hasUserCount,userModelType:typeof prismaInstance?.user},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
+      
       const userCount = await prismaInstance.user.count()
       console.log('[DB CHECK] [5/6] ✓ user.count() successful, count:', userCount)
       diagnostics.databaseConnected = true
       diagnostics.userCount = userCount
       diagnostics.prisma.queryTest = 'success'
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:133',message:'user.count() succeeded',data:{userCount},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
     } catch (error: any) {
       console.error('[DB CHECK] [5/6] ✗ user.count() query failed:', error.message)
       diagnostics.databaseConnected = false
@@ -143,6 +186,10 @@ export async function GET() {
         stack: error.stack,
         errorName: error.name,
       }
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:137',message:'user.count() failed',data:{errorMessage:error.message,errorName:error.name,errorCode:error.code,hasPrismaInstance:!!prismaInstance,hasUser:!!prismaInstance?.user,userType:typeof prismaInstance?.user,userIsFunction:typeof prismaInstance?.user === 'function',userIsObject:typeof prismaInstance?.user === 'object'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+      // #endregion
     }
   } else {
     console.warn('[DB CHECK] [5/6] ⚠ Skipping user.count() - method not available')
@@ -151,6 +198,10 @@ export async function GET() {
     diagnostics.prisma.querySkipReason = diagnostics.prisma.hasUserCount 
       ? 'Prisma instance not available' 
       : 'user.count() method not available'
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/debug/db-check/route.ts:148',message:'Skipping user.count()',data:{hasPrismaInstance:!!prismaInstance,hasUserCount:diagnostics.prisma.hasUserCount,skipReason:diagnostics.prisma.querySkipReason},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
   }
 
   // Step 6: Test findMany query

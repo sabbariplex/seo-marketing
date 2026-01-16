@@ -4,11 +4,26 @@ const nextConfig: NextConfig = {
   // Ensure Prisma Client is properly handled in serverless environments
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Externalize Prisma Client to prevent bundling issues
+      // Externalize Prisma Client and related packages to prevent bundling issues
+      // This is critical for Prisma 7+ to work correctly in serverless environments
+      // Prisma Client must NOT be bundled - it needs to be loaded from node_modules at runtime
       config.externals = config.externals || [];
-      config.externals.push({
-        '@prisma/client': '@prisma/client',
-      });
+      
+      // Add Prisma packages to externals
+      if (Array.isArray(config.externals)) {
+        config.externals.push('@prisma/client');
+        config.externals.push('@prisma/adapter-pg');
+      } else if (typeof config.externals === 'object') {
+        config.externals['@prisma/client'] = '@prisma/client';
+        config.externals['@prisma/adapter-pg'] = '@prisma/adapter-pg';
+      }
+      
+      // Also externalize Prisma's generated files
+      config.resolve = config.resolve || {};
+      config.resolve.alias = config.resolve.alias || {};
+      
+      // Prevent webpack from resolving Prisma's internal modules
+      config.resolve.alias['@prisma/client$'] = require.resolve('@prisma/client');
     }
     return config;
   },
