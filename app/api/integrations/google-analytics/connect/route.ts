@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 
 export async function POST(request: Request) {
   try {
@@ -55,40 +54,46 @@ export async function POST(request: Request) {
 
     // Save to database if available
     let integration = null
-    if (prisma) {
-      try {
-        const user = await prisma.user.findUnique({
-          where: { email: session.user.email! }
-        })
-        
-        if (user) {
-          integration = await prisma.integration.upsert({
-            where: { 
-              id: `ga-${user.id}` 
-            },
-            update: {
-              type: 'google_analytics',
-              credentials: { propertyId, accessToken, refreshToken },
-              isConnected: true,
-              lastSync: new Date(),
-              settings: { propertyId },
-            },
-            create: {
-              id: `ga-${user.id}`,
-              type: 'google_analytics',
-              userId: user.id,
-              projectId: projectId || null,
-              credentials: { propertyId, accessToken, refreshToken },
-              isConnected: true,
-              lastSync: new Date(),
-              settings: { propertyId },
-            },
+    try {
+      // Lazy load Prisma to avoid build-time issues
+      const { prisma } = await import('@/lib/prisma')
+      if (prisma) {
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: session.user.email! }
           })
+          
+          if (user) {
+            integration = await prisma.integration.upsert({
+              where: { 
+                id: `ga-${user.id}` 
+              },
+              update: {
+                type: 'google_analytics',
+                credentials: { propertyId, accessToken, refreshToken },
+                isConnected: true,
+                lastSync: new Date(),
+                settings: { propertyId },
+              },
+              create: {
+                id: `ga-${user.id}`,
+                type: 'google_analytics',
+                userId: user.id,
+                projectId: projectId || null,
+                credentials: { propertyId, accessToken, refreshToken },
+                isConnected: true,
+                lastSync: new Date(),
+                settings: { propertyId },
+              },
+            })
+          }
+        } catch (dbError) {
+          console.error('Database error saving integration:', dbError)
+          // Continue without database - will use session-based storage
         }
-      } catch (dbError) {
-        console.error('Database error saving integration:', dbError)
-        // Continue without database - will use session-based storage
       }
+    } catch (prismaError) {
+      console.error('Error loading Prisma:', prismaError)
     }
 
     return NextResponse.json({ 

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { google } from 'googleapis'
 import { generateTrafficData, generateConversionData, generateSourceData } from '@/lib/mock-data/analytics'
 import { generateKeywordRankings } from '@/lib/mock-data/rankings'
@@ -106,28 +105,34 @@ export async function GET() {
         // Try to get property ID from database
         let propertyId: string | null = null
         
-        if (prisma) {
-          try {
-            const user = await prisma.user.findUnique({
-              where: { email: session.user.email! },
-              include: {
-                integrations: {
-                  where: { 
-                    type: 'google_analytics',
-                    isConnected: true 
+        try {
+          // Lazy load Prisma to avoid build-time issues
+          const { prisma } = await import('@/lib/prisma')
+          if (prisma) {
+            try {
+              const user = await prisma.user.findUnique({
+                where: { email: session.user.email! },
+                include: {
+                  integrations: {
+                    where: { 
+                      type: 'google_analytics',
+                      isConnected: true 
+                    }
                   }
                 }
+              })
+              
+              if (user?.integrations && user.integrations.length > 0) {
+                const integration = user.integrations[0]
+                const settings = integration.settings as any
+                propertyId = settings?.propertyId || null
               }
-            })
-            
-            if (user?.integrations && user.integrations.length > 0) {
-              const integration = user.integrations[0]
-              const settings = integration.settings as any
-              propertyId = settings?.propertyId || null
+            } catch (dbError) {
+              console.error('Error fetching integration from database:', dbError)
             }
-          } catch (dbError) {
-            console.error('Error fetching integration from database:', dbError)
           }
+        } catch (prismaError) {
+          console.error('Error loading Prisma:', prismaError)
         }
 
         // If we have property ID and access token, fetch real data
