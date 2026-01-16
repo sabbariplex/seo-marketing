@@ -8,8 +8,19 @@ const globalForPrisma = globalThis as unknown as {
 // Initialize Prisma only at runtime (not during build)
 // During build, this will be null, which is fine
 function initializePrisma() {
+  console.log('[PRISMA] Initialization check started')
+  console.log('[PRISMA] Environment:', {
+    isServer: typeof window === 'undefined',
+    hasDatabaseUrl: !!process.env.DATABASE_URL,
+    databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'NOT SET',
+    nodeEnv: process.env.NODE_ENV,
+    nextPhase: process.env.NEXT_PHASE,
+    nextRuntime: process.env.NEXT_RUNTIME,
+  })
+
   // Skip if already initialized
   if (prismaInstance) {
+    console.log('[PRISMA] Already initialized, returning existing instance')
     return prismaInstance
   }
 
@@ -21,41 +32,57 @@ function initializePrisma() {
       process.env.NEXT_PHASE === 'phase-production-build' ||
       process.env.NEXT_PHASE === 'phase-development-build'
     
+    console.log('[PRISMA] Build time check:', { isBuildTime, nextPhase: process.env.NEXT_PHASE })
+    
     // Only skip if we're actually in build phase
     // At runtime, NEXT_RUNTIME will be set, so we should initialize
     if (!isBuildTime) {
       try {
+        console.log('[PRISMA] Attempting to require PrismaClient...')
         const { PrismaClient } = require('@prisma/client')
+        console.log('[PRISMA] PrismaClient required successfully')
         
         if (!globalForPrisma.prisma) {
+          console.log('[PRISMA] Creating new PrismaClient instance...')
           // Create PrismaClient with error handling
           globalForPrisma.prisma = new PrismaClient({
-            log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-            errorFormat: 'minimal',
+            log: ['error', 'warn', 'info'],
+            errorFormat: 'pretty',
           })
+          console.log('[PRISMA] ✓ PrismaClient created successfully')
           
-          // Log successful initialization in development
-          if (process.env.NODE_ENV === 'development') {
-            console.log('✓ Prisma Client initialized successfully')
-          }
+          // Test connection
+          globalForPrisma.prisma.$connect()
+            .then(() => {
+              console.log('[PRISMA] ✓ Database connection established')
+            })
+            .catch((err: any) => {
+              console.error('[PRISMA] ✗ Database connection failed:', err.message)
+            })
+        } else {
+          console.log('[PRISMA] Using existing global PrismaClient instance')
         }
         
         prismaInstance = globalForPrisma.prisma
+        console.log('[PRISMA] ✓ Prisma instance ready')
       } catch (prismaError: any) {
         // PrismaClient creation failed
-        console.error('✗ Prisma Client initialization failed:', prismaError?.message || 'Unknown error')
+        console.error('[PRISMA] ✗ PrismaClient initialization failed:', prismaError?.message || 'Unknown error')
+        console.error('[PRISMA] Error stack:', prismaError?.stack)
         prismaInstance = null
       }
     } else {
       // Build time - don't initialize
-      if (process.env.NODE_ENV === 'development') {
-        console.log('⏭ Skipping Prisma initialization (build time)')
-      }
+      console.log('[PRISMA] ⏭ Skipping Prisma initialization (build time)')
     }
   } else {
     // No DATABASE_URL or client-side
-    if (process.env.NODE_ENV === 'development' && typeof window === 'undefined') {
-      console.warn('⚠ DATABASE_URL not set - Prisma will not be initialized')
+    if (typeof window === 'undefined') {
+      console.warn('[PRISMA] ⚠ DATABASE_URL not set or client-side - Prisma will not be initialized')
+      console.warn('[PRISMA] Details:', {
+        isServer: typeof window === 'undefined',
+        hasDatabaseUrl: !!process.env.DATABASE_URL,
+      })
     }
   }
 
@@ -65,8 +92,8 @@ function initializePrisma() {
 // Initialize immediately if conditions are met
 try {
   initializePrisma()
-} catch (error) {
-  // Silently fail during module load
+} catch (error: any) {
+  console.error('[PRISMA] ✗ Fatal error during initialization:', error?.message || 'Unknown error')
   prismaInstance = null
 }
 
