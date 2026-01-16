@@ -19,18 +19,16 @@ function createPrismaClient() {
     databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'Not set',
   })
 
-  const databaseUrl = process.env.DATABASE_URL
-  if (!databaseUrl) {
+  if (!process.env.DATABASE_URL) {
     const error = new Error('DATABASE_URL environment variable is not set')
     console.error('[PRISMA] ❌ Error:', error.message)
     throw error
   }
 
   try {
-    // Use direct connection string - works better in serverless environments
-    // The adapter pattern can cause issues in Vercel's serverless functions
+    // Prisma automatically reads DATABASE_URL from environment variables
+    // No need to pass datasourceUrl explicitly
     const client = new PrismaClient({
-      datasourceUrl: databaseUrl,
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error', 'warn'],
       errorFormat: 'minimal',
     })
