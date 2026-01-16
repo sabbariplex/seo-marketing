@@ -1,13 +1,30 @@
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
-import { PrismaAdapter } from '@auth/prisma-adapter'
-import { prisma } from './prisma'
 
-// Use database adapter if DATABASE_URL is set, otherwise fall back to JWT
-const useDatabase = !!process.env.DATABASE_URL
+// Conditionally import Prisma and adapter only when needed
+let prisma: any = null
+let PrismaAdapter: any = null
+
+try {
+  // Only import if we're server-side and have DATABASE_URL
+  if (typeof window === 'undefined' && process.env.DATABASE_URL) {
+    const prismaModule = require('./prisma')
+    prisma = prismaModule.prisma
+    
+    const adapterModule = require('@auth/prisma-adapter')
+    PrismaAdapter = adapterModule.PrismaAdapter
+  }
+} catch (error) {
+  // Prisma not available (e.g., during build or missing dependencies)
+  // This is fine - we'll fall back to JWT strategy
+  console.warn('Prisma/Adapter not available, using JWT strategy:', error instanceof Error ? error.message : 'Unknown')
+}
+
+// Use database adapter if DATABASE_URL is set and Prisma is available
+const useDatabase = !!process.env.DATABASE_URL && typeof window === 'undefined' && prisma && PrismaAdapter
 
 export const authOptions: NextAuthOptions = {
-  adapter: useDatabase ? PrismaAdapter(prisma) : undefined,
+  adapter: useDatabase && prisma ? PrismaAdapter(prisma) : undefined,
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID || '',
