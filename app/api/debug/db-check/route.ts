@@ -10,6 +10,8 @@ export async function GET() {
     databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'Not set',
     hasPrisma: !!prisma,
     prismaType: typeof prisma,
+    prismaIsNull: prisma === null,
+    prismaIsUndefined: prisma === undefined,
     nodeEnv: process.env.NODE_ENV,
     nextRuntime: process.env.NEXT_RUNTIME,
     nextPhase: process.env.NEXT_PHASE,
