@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // Turbopack configuration (empty to silence the warning)
+  // The webpack config above will still be used when webpack is explicitly selected
+  turbopack: {},
   // Ensure environment variables are available
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
