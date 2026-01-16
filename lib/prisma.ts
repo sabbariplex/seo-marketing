@@ -9,6 +9,7 @@ const globalForPrisma = globalThis as unknown as {
 
 // Initialize Prisma Client with singleton pattern
 // This ensures only one instance exists across serverless function invocations
+// Prisma 7.2.0+ reads DATABASE_URL from environment automatically
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
