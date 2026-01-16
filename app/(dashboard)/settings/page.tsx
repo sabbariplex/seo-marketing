@@ -1,16 +1,63 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signIn, signOut, useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Upload, Save, CheckCircle, XCircle } from 'lucide-react'
 
 export default function SettingsPage() {
-  const { data: session, status } = useSession()
+  const { data: session, status, update } = useSession()
+  const router = useRouter()
   const [connecting, setConnecting] = useState(false)
   const [propertyId, setPropertyId] = useState('')
   const [connected, setConnected] = useState(false)
+  const [hasCheckedSession, setHasCheckedSession] = useState(false)
+
+  // Refresh session after OAuth callback
+  useEffect(() => {
+    // Check if we just came back from OAuth callback
+    // NextAuth redirects to callbackUrl after successful auth
+    const urlParams = new URLSearchParams(window.location.search)
+    const isCallback = urlParams.has('callbackUrl') || 
+                      window.location.hash.includes('access_token') ||
+                      document.referrer.includes('accounts.google.com')
+    
+    if (isCallback && !hasCheckedSession) {
+      setHasCheckedSession(true)
+      // Wait a bit for NextAuth to process the callback
+      setTimeout(async () => {
+        console.log('Refreshing session after OAuth callback...')
+        await update()
+        // Clean up URL if needed
+        if (urlParams.has('callbackUrl')) {
+          router.replace('/settings')
+        }
+      }, 1500)
+    }
+  }, [update, router, hasCheckedSession])
+
+  // Monitor session status and refresh if needed
+  useEffect(() => {
+    // If we're loading for too long after a potential auth, refresh
+    if (status === 'loading' && !hasCheckedSession) {
+      const timeout = setTimeout(async () => {
+        console.log('Session loading timeout, refreshing...')
+        await update()
+        setHasCheckedSession(true)
+      }, 3000)
+      return () => clearTimeout(timeout)
+    }
+    
+    // If we become authenticated, log it for debugging
+    if (status === 'authenticated' && session) {
+      console.log('Session authenticated:', {
+        email: session.user?.email,
+        hasAccessToken: !!(session as any).accessToken
+      })
+    }
+  }, [status, session, update, hasCheckedSession])
 
   const handleGoogleConnect = async () => {
     setConnecting(true)
@@ -84,12 +131,26 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 p-4 border rounded-lg bg-green-50 dark:bg-green-900/20">
                 <CheckCircle className="h-5 w-5 text-green-600" />
-                <div>
+                <div className="flex-1">
                   <p className="font-medium">Connected as {session.user?.email}</p>
                   <p className="text-sm text-muted-foreground">
                     You can now connect Google Analytics
                   </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Access Token: {(session as any).accessToken ? '✓ Available' : '✗ Missing'}
+                  </p>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    console.log('Manually refreshing session...')
+                    await update()
+                    window.location.reload()
+                  }}
+                >
+                  Refresh Session
+                </Button>
               </div>
 
               <div className="space-y-2">

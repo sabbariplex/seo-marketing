@@ -1,0 +1,21 @@
+Add these redirect URIs to Google Cloud Console:
+
+1. Production/Preview URL:
+https://seo-marketing-qbh4-git-main-sabbars-projects-bd42f34b.vercel.app/api/auth/callback/google
+
+2. If you have a custom domain or production URL (check Vercel dashboard):
+https://your-production-domain.vercel.app/api/auth/callback/google
+
+3. For local development (optional):
+http://localhost:3000/api/auth/callback/google
+
+Instructions:
+1. Go to https://console.cloud.google.com/
+2. Select your project
+3. Go to APIs & Services → Credentials
+4. Click on your OAuth 2.0 Client ID
+5. Under "Authorized redirect URIs", click "ADD URI"
+6. Add the first URL above (remove trailing slash if any)
+7. Click "SAVE"
+8. Wait 2-3 minutes
+9. Try signing in again

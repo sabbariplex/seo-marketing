@@ -17,8 +17,10 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+  secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account, user }) {
+      // Initial sign in - store tokens
       if (account && account.access_token) {
         (token as any).accessToken = account.access_token
         if (account.refresh_token) {
@@ -28,11 +30,28 @@ export const authOptions: NextAuthOptions = {
           (token as any).expiresAt = account.expires_at
         }
       }
+      // Store user info
+      if (user) {
+        token.email = user.email
+        token.name = user.name
+        token.picture = user.image
+      }
       return token
     },
     async session({ session, token }) {
       if (session.user && token) {
         const tokenAny = token as any
+        // Ensure user data is populated
+        if (!session.user.email && tokenAny.email) {
+          session.user.email = tokenAny.email
+        }
+        if (!session.user.name && tokenAny.name) {
+          session.user.name = tokenAny.name
+        }
+        if (!session.user.image && tokenAny.picture) {
+          session.user.image = tokenAny.picture
+        }
+        // Add tokens to session
         (session as any).accessToken = tokenAny.accessToken
         (session as any).refreshToken = tokenAny.refreshToken
       }
@@ -45,5 +64,7 @@ export const authOptions: NextAuthOptions = {
   // Use JWT strategy (works without database)
   session: {
     strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+  debug: process.env.NODE_ENV === 'development',
 }
