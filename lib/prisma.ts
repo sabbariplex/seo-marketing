@@ -3,6 +3,8 @@
 // Uses direct connection for better compatibility with serverless environments
 
 import { PrismaClient } from '@prisma/client'
+import { Pool } from 'pg'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -19,16 +21,21 @@ function createPrismaClient() {
     databaseUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.substring(0, 30) + '...' : 'Not set',
   })
 
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = process.env.DATABASE_URL
+  if (!databaseUrl) {
     const error = new Error('DATABASE_URL environment variable is not set')
     console.error('[PRISMA] ❌ Error:', error.message)
     throw error
   }
 
   try {
-    // Prisma automatically reads DATABASE_URL from environment variables
-    // No need to pass datasourceUrl explicitly
+    // Prisma 7 requires an adapter or accelerateUrl
+    // Create a pg Pool and adapter for Prisma
+    const pool = new Pool({ connectionString: databaseUrl })
+    const adapter = new PrismaPg(pool)
+    
     const client = new PrismaClient({
+      adapter,
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error', 'warn'],
       errorFormat: 'minimal',
     })
