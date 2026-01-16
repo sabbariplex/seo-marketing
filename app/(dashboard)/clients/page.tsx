@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus, Mail, Globe, X, UserPlus, Copy, Check } from 'lucide-react'
@@ -15,6 +16,7 @@ interface Client {
 }
 
 export default function ClientsPage() {
+  const router = useRouter()
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -204,10 +206,20 @@ export default function ClientsPage() {
               )}
               <div className="pt-4 space-y-2">
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => window.open(`/client/dashboard?clientId=${client.id}`, '_blank')}
+                  >
                     View Dashboard
                   </Button>
-                  <Button variant="outline" size="sm" className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => router.push(`/settings?connect=${client.id}`)}
+                  >
                     Connect Account
                   </Button>
                 </div>

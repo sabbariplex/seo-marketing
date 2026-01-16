@@ -10,7 +10,7 @@ export default function ClientLayout({
   children: React.ReactNode
 }) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={true}>
       <div className="min-h-screen bg-background">
         <Sidebar />
         <div className="lg:pl-64">

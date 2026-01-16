@@ -17,52 +17,115 @@ export default function SettingsPage() {
 
   // Refresh session after OAuth callback
   useEffect(() => {
-    // Check if we just came back from OAuth callback
-    // NextAuth redirects to callbackUrl after successful auth
+    // Check if we just returned from OAuth (check URL params and referrer)
     const urlParams = new URLSearchParams(window.location.search)
-    const isCallback = urlParams.has('callbackUrl') || 
-                      window.location.hash.includes('access_token') ||
-                      document.referrer.includes('accounts.google.com')
+    const hasAuthParams = urlParams.has('callbackUrl') || 
+                        urlParams.has('error') ||
+                        window.location.hash.includes('access_token')
     
-    if (isCallback && !hasCheckedSession) {
+    // Check referrer for OAuth flow
+    const referrer = document.referrer
+    const isFromOAuth = referrer.includes('accounts.google.com') || 
+                       referrer.includes('oauth2.googleapis.com') ||
+                       referrer.includes('/api/auth/')
+    
+    if ((hasAuthParams || isFromOAuth) && !hasCheckedSession) {
       setHasCheckedSession(true)
-      // Wait a bit for NextAuth to process the callback
-      setTimeout(async () => {
-        console.log('Refreshing session after OAuth callback...')
-        await update()
-        // Clean up URL if needed
-        if (urlParams.has('callbackUrl')) {
-          router.replace('/settings')
-        }
-      }, 1500)
+      console.log('Detected OAuth return, refreshing session...')
+      
+      // Refresh session multiple times with delays
+      const refreshAttempts = [500, 1500, 3000]
+      const timeouts: NodeJS.Timeout[] = []
+      
+      refreshAttempts.forEach(delay => {
+        const timeout = setTimeout(async () => {
+          try {
+            console.log(`Refreshing session (attempt after ${delay}ms)...`)
+            const result = await update()
+            // Check if we're now authenticated after update
+            if (result?.data) {
+              console.log('Session updated successfully!')
+              // Clean URL if needed
+              if (hasAuthParams) {
+                router.replace('/settings')
+              }
+            }
+          } catch (error) {
+            console.error('Error refreshing session:', error)
+          }
+        }, delay)
+        timeouts.push(timeout)
+      })
+      
+      return () => {
+        timeouts.forEach(clearTimeout)
+      }
     }
-  }, [update, router, hasCheckedSession])
+  }, [update, hasCheckedSession, router])
 
-  // Monitor session status and refresh if needed
+  // Listen for window focus (user might return from OAuth popup)
   useEffect(() => {
-    // If we're loading for too long after a potential auth, refresh
-    if (status === 'loading' && !hasCheckedSession) {
-      const timeout = setTimeout(async () => {
-        console.log('Session loading timeout, refreshing...')
+    const handleFocus = async () => {
+      if (status === 'loading' || status === 'unauthenticated') {
+        console.log('Window focused, checking session...')
         await update()
-        setHasCheckedSession(true)
-      }, 3000)
-      return () => clearTimeout(timeout)
+      }
     }
     
-    // If we become authenticated, log it for debugging
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [update, status])
+
+  // Poll session when loading
+  useEffect(() => {
+    if (status === 'loading' && !hasCheckedSession) {
+      const pollInterval = setInterval(async () => {
+        console.log('Polling for session update...')
+        await update()
+      }, 2000)
+      
+      const timeout = setTimeout(() => {
+        clearInterval(pollInterval)
+        setHasCheckedSession(true)
+      }, 10000) // Stop polling after 10 seconds
+      
+      return () => {
+        clearInterval(pollInterval)
+        clearTimeout(timeout)
+      }
+    }
+  }, [status, update, hasCheckedSession])
+
+  // Monitor session status
+  useEffect(() => {
     if (status === 'authenticated' && session) {
       console.log('Session authenticated:', {
         email: session.user?.email,
-        hasAccessToken: !!(session as any).accessToken
+        hasAccessToken: !!(session as any).accessToken,
+        hasRefreshToken: !!(session as any).refreshToken
       })
+      // Reset connecting state when authenticated
+      setConnecting(false)
     }
-  }, [status, session, update, hasCheckedSession])
+    
+    if (status === 'unauthenticated') {
+      setConnecting(false)
+    }
+  }, [status, session])
 
   const handleGoogleConnect = async () => {
     setConnecting(true)
+    setHasCheckedSession(false) // Reset to allow session check after redirect
     try {
-      await signIn('google', { callbackUrl: '/settings' })
+      const result = await signIn('google', { 
+        callbackUrl: '/settings',
+        redirect: true 
+      })
+      // If redirect is false, manually handle
+      if (result?.error) {
+        console.error('Sign in error:', result.error)
+        setConnecting(false)
+      }
     } catch (error) {
       console.error('Connection error:', error)
       setConnecting(false)
@@ -208,7 +271,21 @@ export default function SettingsPage() {
               <div className="w-32 h-32 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted">
                 <span className="text-muted-foreground text-sm">No logo</span>
               </div>
-              <Button variant="outline">
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = 'image/*'
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) {
+                      alert(`Logo selected: ${file.name} (Upload functionality to be implemented)`)
+                    }
+                  }
+                  input.click()
+                }}
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload Logo
               </Button>
@@ -257,7 +334,11 @@ export default function SettingsPage() {
             />
           </div>
 
-          <Button>
+          <Button
+            onClick={() => {
+              alert('Branding settings saved! (This is a demo - implement API call to save settings)')
+            }}
+          >
             <Save className="h-4 w-4 mr-2" />
             Save Branding Settings
           </Button>
@@ -277,28 +358,58 @@ export default function SettingsPage() {
               <h3 className="font-medium">Google Search Console</h3>
               <p className="text-sm text-muted-foreground">Not connected</p>
             </div>
-            <Button variant="outline" size="sm">Connect</Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => {
+                if (session) {
+                  alert('Google Search Console connection coming soon!')
+                } else {
+                  alert('Please sign in with Google first')
+                }
+              }}
+            >
+              Connect
+            </Button>
           </div>
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div>
               <h3 className="font-medium">Ahrefs</h3>
               <p className="text-sm text-muted-foreground">Not connected</p>
             </div>
-            <Button variant="outline" size="sm">Connect</Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => alert('Ahrefs integration coming soon!')}
+            >
+              Connect
+            </Button>
           </div>
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div>
               <h3 className="font-medium">SEMrush</h3>
               <p className="text-sm text-muted-foreground">Not connected</p>
             </div>
-            <Button variant="outline" size="sm">Connect</Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => alert('SEMrush integration coming soon!')}
+            >
+              Connect
+            </Button>
           </div>
           <div className="flex items-center justify-between p-4 border rounded-lg">
             <div>
               <h3 className="font-medium">Moz</h3>
               <p className="text-sm text-muted-foreground">Not connected</p>
             </div>
-            <Button variant="outline" size="sm">Connect</Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => alert('Moz integration coming soon!')}
+            >
+              Connect
+            </Button>
           </div>
         </CardContent>
       </Card>

@@ -58,9 +58,10 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-  pages: {
-    signIn: '/auth/signin',
-  },
+  // Remove custom signin page - use NextAuth default
+  // pages: {
+  //   signIn: '/auth/signin',
+  // },
   // Use JWT strategy (works without database)
   session: {
     strategy: 'jwt',
