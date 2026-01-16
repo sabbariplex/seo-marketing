@@ -13,11 +13,24 @@ try {
     
     const adapterModule = require('@auth/prisma-adapter')
     PrismaAdapter = adapterModule.PrismaAdapter
+    
+    // Log in development
+    if (process.env.NODE_ENV === 'development') {
+      if (prisma && PrismaAdapter) {
+        console.log('✓ PrismaAdapter loaded successfully')
+      } else {
+        console.warn('⚠ PrismaAdapter not available - will use JWT strategy')
+      }
+    }
   }
 } catch (error) {
   // Prisma not available (e.g., during build or missing dependencies)
   // This is fine - we'll fall back to JWT strategy
-  console.warn('Prisma/Adapter not available, using JWT strategy:', error instanceof Error ? error.message : 'Unknown')
+  const errorMsg = error instanceof Error ? error.message : 'Unknown'
+  console.warn('Prisma/Adapter not available, using JWT strategy:', errorMsg)
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('Error details:', error)
+  }
 }
 
 // Use database adapter if DATABASE_URL is set and Prisma is available
@@ -124,11 +137,22 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signIn({ user, account, isNewUser }) {
+      console.log('🔐 SignIn event:', {
+        email: user.email,
+        isNewUser,
+        useDatabase,
+        hasAdapter: !!authOptions.adapter,
+        strategy: useDatabase ? 'database' : 'jwt'
+      })
+      
       if (isNewUser && useDatabase) {
-        console.log('New user created:', user.email)
+        console.log('✅ New user created in database:', user.email)
+      } else if (isNewUser && !useDatabase) {
+        console.warn('⚠ New user but database not available - using JWT strategy')
       }
+      
       if (account) {
-        console.log('User signed in:', user.email, 'Provider:', account.provider)
+        console.log('📝 User signed in:', user.email, 'Provider:', account.provider)
       }
     },
     async session({ session }) {
