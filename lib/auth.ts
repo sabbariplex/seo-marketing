@@ -45,25 +45,36 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token, user }) {
+      // Ensure session.user exists
+      if (!session.user) {
+        return session
+      }
+
       // When using database adapter, user is available from DB
       if (user) {
-        session.user.id = user.id
+        // Extend session.user with id property
+        const sessionUser = session.user as typeof session.user & { id?: string }
+        sessionUser.id = user.id
         session.user.email = user.email || session.user.email || null
         session.user.name = user.name || session.user.name || null
         session.user.image = user.image || session.user.image || null
         
         // Get tokens from Account table when using database strategy
         // PrismaAdapter automatically saves tokens to Account table
-        try {
-          const account = await prisma.account.findFirst({
-            where: { userId: user.id, provider: 'google' },
-          })
-          if (account) {
-            (session as any).accessToken = account.access_token
-            (session as any).refreshToken = account.refresh_token
+        if (useDatabase && prisma) {
+          try {
+            const account = await prisma.account.findFirst({
+              where: { userId: user.id, provider: 'google' },
+            })
+            if (account && account.access_token) {
+              (session as any).accessToken = account.access_token
+            }
+            if (account && account.refresh_token) {
+              (session as any).refreshToken = account.refresh_token
+            }
+          } catch (error) {
+            console.error('Error fetching account tokens:', error)
           }
-        } catch (error) {
-          console.error('Error fetching account tokens:', error)
         }
       } else if (token) {
         // Fallback for JWT strategy (when database is not available)
