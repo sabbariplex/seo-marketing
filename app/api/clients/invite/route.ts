@@ -1,16 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
-
-// Mock storage - in production, use database
-const clientInvites = new Map<string, {
-  clientId: string
-  email: string
-  token: string
-  expires: Date
-  agencyUserId: string
-}>()
 
 export async function POST(request: Request) {
   try {
@@ -33,18 +25,45 @@ export async function POST(request: Request) {
       )
     }
 
+    // Get user from database
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Verify client belongs to user
+    const client = await prisma.client.findFirst({
+      where: {
+        id: clientId,
+        userId: user.id
+      }
+    })
+
+    if (!client) {
+      return NextResponse.json(
+        { error: 'Client not found or access denied' },
+        { status: 404 }
+      )
+    }
+
     // Generate invite token
     const token = crypto.randomBytes(32).toString('hex')
     const expires = new Date()
     expires.setDate(expires.getDate() + 7) // Expires in 7 days
 
-    // Store invite (in production, save to database)
-    clientInvites.set(token, {
-      clientId,
-      email,
-      token,
-      expires,
-      agencyUserId: session.user.email!
+    // Update client with invite token
+    await prisma.client.update({
+      where: { id: clientId },
+      data: {
+        inviteToken: token,
+        inviteExpires: expires,
+      }
     })
 
     // Generate invite link
@@ -61,7 +80,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Create invite error:', error)
     return NextResponse.json(
-      { error: 'Failed to create invite' },
+      { error: 'Failed to create invite', details: String(error) },
       { status: 500 }
     )
   }
@@ -79,16 +98,18 @@ export async function GET(request: Request) {
       )
     }
 
-    const invite = clientInvites.get(token)
+    const client = await prisma.client.findUnique({
+      where: { inviteToken: token }
+    })
 
-    if (!invite) {
+    if (!client) {
       return NextResponse.json(
         { error: 'Invalid invite token' },
         { status: 404 }
       )
     }
 
-    if (new Date() > invite.expires) {
+    if (client.inviteExpires && new Date() > client.inviteExpires) {
       return NextResponse.json(
         { error: 'Invite has expired' },
         { status: 400 }
@@ -97,13 +118,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       valid: true,
-      email: invite.email,
-      clientId: invite.clientId
+      email: client.email,
+      clientId: client.id
     })
   } catch (error) {
     console.error('Verify invite error:', error)
     return NextResponse.json(
-      { error: 'Failed to verify invite' },
+      { error: 'Failed to verify invite', details: String(error) },
       { status: 500 }
     )
   }

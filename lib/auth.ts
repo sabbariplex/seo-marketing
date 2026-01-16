@@ -225,23 +225,44 @@ export const authOptions: NextAuthOptions = {
         })
       }
       
-      // Verify user was saved to database if using database strategy
-      if (useDatabase && prisma && isNewUser) {
+      // Verify user was saved to database and update name if missing
+      if (useDatabase && prisma) {
         try {
           const savedUser = await prisma.user.findUnique({
             where: { email: user.email! }
           })
           if (savedUser) {
-            console.log('[AUTH EVENT] ✅ New user confirmed in database:', {
+            // Update user name if it's missing but we have it from OAuth
+            if (!savedUser.name && user.name) {
+              console.log('[AUTH EVENT] Updating user name in database...')
+              await prisma.user.update({
+                where: { id: savedUser.id },
+                data: { name: user.name }
+              })
+              console.log('[AUTH EVENT] ✅ User name updated in database')
+            }
+            
+            // Update user image if it's missing but we have it from OAuth
+            if (!savedUser.image && user.image) {
+              console.log('[AUTH EVENT] Updating user image in database...')
+              await prisma.user.update({
+                where: { id: savedUser.id },
+                data: { image: user.image }
+              })
+              console.log('[AUTH EVENT] ✅ User image updated in database')
+            }
+            
+            console.log('[AUTH EVENT] ✅ User confirmed in database:', {
               id: savedUser.id,
               email: savedUser.email,
+              name: savedUser.name,
               createdAt: savedUser.createdAt,
             })
           } else {
             console.error('[AUTH EVENT] ✗ User not found in database after sign in!')
           }
         } catch (dbError: any) {
-          console.error('[AUTH EVENT] ✗ Error checking database for user:', dbError.message)
+          console.error('[AUTH EVENT] ✗ Error checking/updating database for user:', dbError.message)
         }
       } else if (isNewUser && !useDatabase) {
         console.warn('[AUTH EVENT] ⚠ New user but database not available - using JWT strategy')

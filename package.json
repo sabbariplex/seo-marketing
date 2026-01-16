@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "verify-prisma": "node scripts/verify-prisma.js"
+    "verify-prisma": "node scripts/verify-prisma.js",
+    "setup-neon": "node scripts/setup-neon.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",

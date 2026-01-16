@@ -14,6 +14,14 @@ export default function SettingsPage() {
   const [propertyId, setPropertyId] = useState('')
   const [connected, setConnected] = useState(false)
   const [hasCheckedSession, setHasCheckedSession] = useState(false)
+  
+  // Branding state
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [primaryColor, setPrimaryColor] = useState('#3b82f6')
+  const [secondaryColor, setSecondaryColor] = useState('#1e40af')
+  const [companyName, setCompanyName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   // Refresh session after OAuth callback
   useEffect(() => {
@@ -112,6 +120,21 @@ export default function SettingsPage() {
       setConnecting(false)
     }
   }, [status, session])
+
+  // Load branding settings
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetch('/api/branding')
+        .then(res => res.json())
+        .then(data => {
+          if (data.logoUrl) setLogoUrl(data.logoUrl)
+          if (data.primaryColor) setPrimaryColor(data.primaryColor)
+          if (data.secondaryColor) setSecondaryColor(data.secondaryColor)
+          if (data.companyName) setCompanyName(data.companyName)
+        })
+        .catch(err => console.error('Failed to load branding:', err))
+    }
+  }, [status])
 
   const handleGoogleConnect = async () => {
     setConnecting(true)
@@ -268,26 +291,54 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Company Logo</label>
             <div className="flex items-center gap-4">
-              <div className="w-32 h-32 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted">
-                <span className="text-muted-foreground text-sm">No logo</span>
+              <div className="w-32 h-32 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-muted overflow-hidden">
+                {logoUrl ? (
+                  <img src={logoUrl} alt="Company logo" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-muted-foreground text-sm">No logo</span>
+                )}
               </div>
               <Button 
                 variant="outline"
+                disabled={uploading}
                 onClick={() => {
                   const input = document.createElement('input')
                   input.type = 'file'
                   input.accept = 'image/*'
-                  input.onchange = (e) => {
+                  input.onchange = async (e) => {
                     const file = (e.target as HTMLInputElement).files?.[0]
                     if (file) {
-                      alert(`Logo selected: ${file.name} (Upload functionality to be implemented)`)
+                      setUploading(true)
+                      try {
+                        const formData = new FormData()
+                        formData.append('file', file)
+                        
+                        const res = await fetch('/api/branding/upload', {
+                          method: 'POST',
+                          body: formData,
+                        })
+                        
+                        if (res.ok) {
+                          const data = await res.json()
+                          setLogoUrl(data.logoUrl)
+                          alert('Logo uploaded successfully!')
+                        } else {
+                          const error = await res.json()
+                          alert(`Failed to upload logo: ${error.error}`)
+                        }
+                      } catch (error) {
+                        console.error('Upload error:', error)
+                        alert('Failed to upload logo')
+                      } finally {
+                        setUploading(false)
+                      }
                     }
                   }
                   input.click()
                 }}
               >
                 <Upload className="h-4 w-4 mr-2" />
-                Upload Logo
+                {uploading ? 'Uploading...' : 'Upload Logo'}
               </Button>
             </div>
           </div>
@@ -298,12 +349,14 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  defaultValue="#3b82f6"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
                   className="w-16 h-10 rounded border border-border cursor-pointer"
                 />
                 <input
                   type="text"
-                  defaultValue="#3b82f6"
+                  value={primaryColor}
+                  onChange={(e) => setPrimaryColor(e.target.value)}
                   className="flex-1 px-3 py-2 rounded-md border border-border bg-background"
                 />
               </div>
@@ -313,12 +366,14 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="color"
-                  defaultValue="#1e40af"
+                  value={secondaryColor}
+                  onChange={(e) => setSecondaryColor(e.target.value)}
                   className="w-16 h-10 rounded border border-border cursor-pointer"
                 />
                 <input
                   type="text"
-                  defaultValue="#1e40af"
+                  value={secondaryColor}
+                  onChange={(e) => setSecondaryColor(e.target.value)}
                   className="flex-1 px-3 py-2 rounded-md border border-border bg-background"
                 />
               </div>
@@ -329,18 +384,46 @@ export default function SettingsPage() {
             <label className="text-sm font-medium">Company Name</label>
             <input
               type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
               placeholder="Your Agency Name"
               className="w-full px-3 py-2 rounded-md border border-border bg-background"
             />
           </div>
 
           <Button
-            onClick={() => {
-              alert('Branding settings saved! (This is a demo - implement API call to save settings)')
+            onClick={async () => {
+              setSaving(true)
+              try {
+                const res = await fetch('/api/branding', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    logoUrl,
+                    primaryColor,
+                    secondaryColor,
+                    companyName,
+                  }),
+                })
+                
+                if (res.ok) {
+                  const data = await res.json()
+                  alert('Branding settings saved successfully!')
+                } else {
+                  const error = await res.json()
+                  alert(`Failed to save settings: ${error.error}`)
+                }
+              } catch (error) {
+                console.error('Save error:', error)
+                alert('Failed to save branding settings')
+              } finally {
+                setSaving(false)
+              }
             }}
+            disabled={saving}
           >
             <Save className="h-4 w-4 mr-2" />
-            Save Branding Settings
+            {saving ? 'Saving...' : 'Save Branding Settings'}
           </Button>
         </CardContent>
       </Card>

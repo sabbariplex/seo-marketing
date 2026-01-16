@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,22 +7,22 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String        @id @default(cuid())
+  email         String        @unique
   name          String?
   emailVerified DateTime?
   image         String?
-  role          String    @default("agency") // "agency" or "client"
-  clientId      String?   // If role is "client", link to Client
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role          String        @default("agency")
+  clientId      String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   accounts      Account[]
-  sessions      Session[]
-  clients       Client[]  @relation("AgencyClients")
-  client        Client?   @relation("ClientUser")
+  client        Client?       @relation("ClientUser")
+  clients       Client[]      @relation("AgencyClients")
   dashboards    Dashboard[]
-  reports       Report[]
   integrations  Integration[]
+  reports       Report[]
+  sessions      Session[]
 }
 
 model Account {
@@ -34,12 +31,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -63,120 +60,120 @@ model VerificationToken {
 }
 
 model Client {
-  id            String    @id @default(cuid())
+  id            String      @id @default(cuid())
   name          String
   email         String?
   website       String?
-  userId        String    // Agency user who owns this client
-  user          User      @relation("AgencyClients", fields: [userId], references: [id], onDelete: Cascade)
-  clientUserId  String?   @unique // Client user who can access this client's data
-  clientUser    User?     @relation("ClientUser", fields: [clientUserId], references: [id], onDelete: SetNull)
-  inviteToken   String?   @unique // Token for client invitation
-  inviteExpires DateTime? // When invite expires
-  hasAccess     Boolean   @default(false) // Whether client has been granted access
-  projects      Project[]
+  userId        String
+  clientUserId  String?     @unique
+  inviteToken   String?     @unique
+  inviteExpires DateTime?
+  hasAccess     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  clientUser    User?       @relation("ClientUser", fields: [clientUserId], references: [id])
+  user          User        @relation("AgencyClients", fields: [userId], references: [id], onDelete: Cascade)
   dashboards    Dashboard[]
+  projects      Project[]
   reports       Report[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
 }
 
 model Project {
-  id            String    @id @default(cuid())
-  name          String
-  clientId      String
-  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  website       String?
-  dashboards    Dashboard[]
-  reports       Report[]
-  integrations  Integration[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  clientId     String
+  website      String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  dashboards   Dashboard[]
+  integrations Integration[]
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  reports      Report[]
 }
 
 model Dashboard {
-  id            String    @id @default(cuid())
-  name          String
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId      String?
-  client        Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  projectId     String?
-  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  layout        Json?     // Store widget positions and configuration
-  isDefault     Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  clientId  String?
+  projectId String?
+  layout    Json?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Report {
-  id            String    @id @default(cuid())
-  name          String
-  type          String    // "daily", "weekly", "monthly", "custom"
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId      String?
-  client        Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  projectId     String?
-  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  template      Json      // Report template configuration
-  generatedAt   DateTime?
-  fileUrl       String?   // URL to generated PDF/HTML
-  schedules     ReportSchedule[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String           @id @default(cuid())
+  name        String
+  type        String
+  userId      String
+  clientId    String?
+  projectId   String?
+  template    Json
+  generatedAt DateTime?
+  fileUrl     String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  client      Client?          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedules   ReportSchedule[]
 }
 
 model ReportSchedule {
-  id            String    @id @default(cuid())
-  reportId      String
-  report        Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
-  frequency     String    // "daily", "weekly", "monthly"
-  dayOfWeek     Int?      // 0-6 for weekly
-  dayOfMonth    Int?      // 1-31 for monthly
-  time          String    // HH:mm format
-  recipients    String[]  // Email addresses
-  isActive      Boolean   @default(true)
-  lastSent      DateTime?
-  nextRun       DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  reportId   String
+  frequency  String
+  dayOfWeek  Int?
+  dayOfMonth Int?
+  time       String
+  recipients String[]
+  isActive   Boolean   @default(true)
+  lastSent   DateTime?
+  nextRun    DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  report     Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
 }
 
 model Branding {
-  id            String    @id @default(cuid())
-  userId        String    @unique
-  logoUrl       String?
-  primaryColor  String?   @default("#3b82f6")
-  secondaryColor String? @default("#1e40af")
-  companyName   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  logoUrl        String?
+  primaryColor   String?  @default("#3b82f6")
+  secondaryColor String?  @default("#1e40af")
+  companyName    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Integration {
-  id            String    @id @default(cuid())
-  type          String    // "google_analytics", "search_console", "ahrefs", "semrush", "moz"
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  projectId     String?
-  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  credentials   Json      // Encrypted API keys/tokens
-  isConnected   Boolean   @default(false)
-  lastSync      DateTime?
-  settings      Json?     // Additional integration settings
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  type        String
+  userId      String
+  projectId   String?
+  credentials Json
+  isConnected Boolean   @default(false)
+  lastSync    DateTime?
+  settings    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model MetricSnapshot {
-  id            String    @id @default(cuid())
-  projectId     String
-  metricType    String    // "traffic", "rankings", "backlinks", "pagespeed", "conversions"
-  data          Json      // Metric data
-  date          DateTime
-  createdAt     DateTime  @default(now())
-  
+  id         String   @id @default(cuid())
+  projectId  String
+  metricType String
+  data       Json
+  date       DateTime
+  createdAt  DateTime @default(now())
+
   @@index([projectId, metricType, date])
   @@index([date])
 }

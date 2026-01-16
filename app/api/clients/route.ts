@@ -1,49 +1,36 @@
 import { NextResponse } from 'next/server'
-
-// Mock clients data - stored in memory for demo (will be lost on server restart)
-let mockClients = [
-  {
-    id: '1',
-    name: 'Acme Corporation',
-    email: 'contact@acme.com',
-    website: 'https://acme.com',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: '2',
-    name: 'TechStart Inc',
-    email: 'hello@techstart.com',
-    website: 'https://techstart.com',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: '3',
-    name: 'Digital Solutions LLC',
-    email: 'info@digitalsolutions.com',
-    website: 'https://digitalsolutions.com',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-]
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 
 export async function GET() {
   try {
-    // For demo: return mock clients without database
-    // In production with database:
-    // const session = await getServerSession(authOptions)
-    // if (session?.user?.email) {
-    //   const user = await prisma.user.findUnique({
-    //     where: { email: session.user.email }
-    //   })
-    //   const clients = await prisma.client.findMany({
-    //     where: { userId: user.id }
-    //   })
-    //   return NextResponse.json(clients)
-    // }
+    const session = await getServerSession(authOptions)
     
-    return NextResponse.json(mockClients)
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const clients = await prisma.client.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' }
+    })
+    
+    return NextResponse.json(clients)
   } catch (error) {
     console.error('Clients API error:', error)
     return NextResponse.json(
@@ -55,30 +42,44 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
+    const session = await getServerSession(authOptions)
     
-    // For demo: create client in memory
-    // In production with database:
-    // const session = await getServerSession(authOptions)
-    // if (!session?.user?.email) {
-    //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    // }
-    // const user = await prisma.user.findUnique({
-    //   where: { email: session.user.email }
-    // })
-    // const newClient = await prisma.client.create({
-    //   data: { ...body, userId: user.id }
-    // })
-    
-    const newClient = {
-      id: Date.now().toString(),
-      ...body,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+    if (!session?.user?.email) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
     }
-    
-    // Add to mock clients array
-    mockClients = [...mockClients, newClient]
+
+    const body = await request.json()
+    const { name, email, website } = body
+
+    if (!name) {
+      return NextResponse.json(
+        { error: 'Client name is required' },
+        { status: 400 }
+      )
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email }
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    const newClient = await prisma.client.create({
+      data: {
+        name,
+        email: email || null,
+        website: website || null,
+        userId: user.id,
+      }
+    })
     
     return NextResponse.json(newClient, { status: 201 })
   } catch (error) {
