@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node scripts/check-env.js && (prisma db push --skip-generate || echo 'Warning: Database push failed, continuing build...') && next build",
+    "build": "node scripts/check-env.js && prisma generate && (prisma db push --skip-generate || echo 'Warning: Database push failed, continuing build...') && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate"
