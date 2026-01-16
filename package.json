@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node -e \"if (!process.env.DATABASE_URL) { console.error('ERROR: DATABASE_URL environment variable is not set! Please add it in Vercel Settings > Environment Variables.'); process.exit(1); }\" && prisma db push --skip-generate && next build",
+    "build": "node scripts/check-env.js && prisma db push --skip-generate && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate"
