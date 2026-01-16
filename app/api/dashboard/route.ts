@@ -2,10 +2,6 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { google } from 'googleapis'
-import { generateTrafficData, generateConversionData, generateSourceData } from '@/lib/mock-data/analytics'
-import { generateKeywordRankings } from '@/lib/mock-data/rankings'
-import { generateBacklinkMetrics, getBacklinkHistory } from '@/lib/mock-data/backlinks'
-import { generatePageSpeedMetrics } from '@/lib/mock-data/pagespeed'
 
 async function fetchGoogleAnalyticsData(propertyId: string, accessToken: string) {
   try {
@@ -151,25 +147,29 @@ export async function GET() {
       }
     }
 
-    // Use mock data if real data wasn't fetched
+    // Return empty data if real data wasn't fetched
     if (!useRealData) {
-      trafficData = generateTrafficData(30)
-      conversionData = generateConversionData(30)
-      sourceData = generateSourceData()
+      trafficData = []
+      conversionData = []
+      sourceData = []
     }
 
-    // Always use mock data for these (not from Google Analytics)
-    const keywordRankings = generateKeywordRankings()
-    const backlinkMetrics = generateBacklinkMetrics()
-    const backlinkHistory = getBacklinkHistory(30)
-    const pageSpeed = generatePageSpeedMetrics()
+    // These would need to be fetched from actual data sources
+    const keywordRankings: any[] = []
+    const backlinkMetrics: any = {}
+    const backlinkHistory: any[] = []
+    const pageSpeed: any = {}
 
     // Calculate KPIs
     const totalSessions = trafficData.reduce((sum, d) => sum + d.sessions, 0)
     const totalUsers = trafficData.reduce((sum, d) => sum + d.users, 0)
     const totalConversions = conversionData.reduce((sum, d) => sum + d.conversions, 0)
-    const avgConversionRate = conversionData.reduce((sum, d) => sum + d.conversionRate, 0) / conversionData.length
-    const avgBounceRate = trafficData.reduce((sum, d) => sum + d.bounceRate, 0) / trafficData.length
+    const avgConversionRate = conversionData.length > 0 
+      ? conversionData.reduce((sum, d) => sum + d.conversionRate, 0) / conversionData.length 
+      : 0
+    const avgBounceRate = trafficData.length > 0 
+      ? trafficData.reduce((sum, d) => sum + d.bounceRate, 0) / trafficData.length 
+      : 0
 
     // Calculate changes (comparing last 7 days vs previous 7 days)
     const recentTraffic = trafficData.length >= 7 
@@ -220,7 +220,9 @@ export async function GET() {
           change: bounceRateChange
         },
         avgSessionDuration: {
-          value: Math.round(trafficData.reduce((sum, d) => sum + d.avgSessionDuration, 0) / trafficData.length)
+          value: trafficData.length > 0 
+            ? Math.round(trafficData.reduce((sum, d) => sum + d.avgSessionDuration, 0) / trafficData.length)
+            : 0
         }
       },
       traffic: trafficData,
