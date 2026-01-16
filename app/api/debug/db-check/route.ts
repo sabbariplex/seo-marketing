@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 
+// Ensure this route uses Node.js runtime (not Edge) for Prisma support
+export const runtime = 'nodejs'
+
 export async function GET() {
   console.log('[DB CHECK] ========== Diagnostic endpoint called ==========')
   

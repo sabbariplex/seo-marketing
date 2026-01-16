@@ -31,14 +31,27 @@ function createPrismaClient() {
   try {
     // Prisma 7 requires an adapter or accelerateUrl
     // Create a pg Pool and adapter for Prisma
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/prisma.ts:31',message:'Before creating pool and adapter',data:{hasDatabaseUrl:!!databaseUrl,prismaClientType:typeof PrismaClient,PrismaClientIsFunction:typeof PrismaClient === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
+    
     const pool = new Pool({ connectionString: databaseUrl })
     const adapter = new PrismaPg(pool)
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/prisma.ts:36',message:'Before creating PrismaClient',data:{adapterType:typeof adapter,hasAdapter:!!adapter},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
     
     const client = new PrismaClient({
       adapter,
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error', 'warn'],
       errorFormat: 'minimal',
     })
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/ee0c5773-6a51-4de8-ab8f-3590ca659613',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/prisma.ts:42',message:'After creating PrismaClient',data:{clientType:typeof client,clientConstructor:client.constructor?.name,isPrismaClient:client instanceof PrismaClient},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'H'})}).catch(()=>{});
+    // #endregion
 
     console.log('[PRISMA] ✓ Prisma Client created successfully')
     console.log('[PRISMA] Client type:', typeof client)
