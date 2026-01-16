@@ -35,6 +35,9 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // Turbopack configuration (empty to silence the warning)
+  // We use --webpack flag in build script to force webpack for Prisma externalization
+  turbopack: {},
   // Ensure environment variables are available
   env: {
     DATABASE_URL: process.env.DATABASE_URL,
