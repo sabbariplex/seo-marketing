@@ -43,7 +43,7 @@ export default function SettingsPage() {
             console.log(`Refreshing session (attempt after ${delay}ms)...`)
             const result = await update()
             // Check if we're now authenticated after update
-            if (result?.data) {
+            if (result) {
               console.log('Session updated successfully!')
               // Clean URL if needed
               if (hasAuthParams) {
