@@ -122,11 +122,32 @@ export const prisma = new Proxy({} as any, {
       }
       throw new Error(`Prisma Client is not initialized. Property: ${String(prop)}. Check DATABASE_URL and ensure Prisma Client is generated.`)
     }
+    
+    // Get the value from the instance
     const value = instance[prop]
-    // Bind functions to the instance
+    
+    // If it's a function, we need to return it bound to the instance
     if (typeof value === 'function') {
       return value.bind(instance)
     }
+    
+    // If it's an object (like instance.user), return a Proxy that forwards to it
+    if (value && typeof value === 'object') {
+      return new Proxy(value, {
+        get(objTarget, objProp) {
+          const objValue = objTarget[objProp]
+          if (typeof objValue === 'function') {
+            return objValue.bind(objTarget)
+          }
+          return objValue
+        }
+      })
+    }
+    
     return value
+  },
+  has(_target, prop) {
+    const instance = getPrismaInstance()
+    return instance ? prop in instance : false
   }
 })
