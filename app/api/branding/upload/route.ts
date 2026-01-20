@@ -17,7 +17,17 @@ export async function POST(request: Request) {
     }
 
     // Get user from database
-    const { prisma } = await import('@/lib/prisma')
+    const prismaModule = await import('@/lib/prisma')
+    const prisma = prismaModule?.prisma
+    
+    if (!prisma) {
+      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
+      return NextResponse.json(
+        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
+        { status: 500 }
+      )
+    }
+    
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -76,7 +86,17 @@ export async function POST(request: Request) {
     const logoUrl = `/uploads/logos/${filename}`
 
     // Update branding with logo URL
-    const { prisma: updatePrisma } = await import('@/lib/prisma')
+    const updatePrismaModule = await import('@/lib/prisma')
+    const updatePrisma = updatePrismaModule?.prisma
+    
+    if (!updatePrisma) {
+      console.error('[API] Prisma module invalid for update:', { hasModule: !!updatePrismaModule, hasPrisma: !!updatePrisma })
+      return NextResponse.json(
+        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
+        { status: 500 }
+      )
+    }
+    
     await updatePrisma.branding.upsert({
       where: { userId: user.id },
       update: { logoUrl },
@@ -92,9 +112,11 @@ export async function POST(request: Request) {
       message: 'Logo uploaded successfully'
     })
   } catch (error) {
-    console.error('Logo upload error:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace'
+    console.error('[POST /api/branding/upload] Error:', { message: errorMsg, stack: errorStack, error })
     return NextResponse.json(
-      { error: 'Failed to upload logo', details: String(error) },
+      { error: 'Failed to upload logo', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }
     )
   }

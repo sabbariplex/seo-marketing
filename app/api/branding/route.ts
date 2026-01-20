@@ -14,7 +14,17 @@ export async function GET() {
     }
 
     // Get user from database
-    const { prisma } = await import('@/lib/prisma')
+    const prismaModule = await import('@/lib/prisma')
+    const prisma = prismaModule?.prisma
+    
+    if (!prisma) {
+      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
+      return NextResponse.json(
+        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
+        { status: 500 }
+      )
+    }
+    
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -39,9 +49,11 @@ export async function GET() {
       companyName: branding?.companyName || null,
     })
   } catch (error) {
-    console.error('Branding API error:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace'
+    console.error('[GET /api/branding] Error:', { message: errorMsg, stack: errorStack, error })
     return NextResponse.json(
-      { error: 'Failed to fetch branding settings', details: String(error) },
+      { error: 'Failed to fetch branding settings', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }
     )
   }
@@ -58,7 +70,17 @@ export async function POST(request: Request) {
       )
     }
 
-    const { prisma } = await import('@/lib/prisma')
+    const prismaModule = await import('@/lib/prisma')
+    const prisma = prismaModule?.prisma
+    
+    if (!prisma) {
+      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
+      return NextResponse.json(
+        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
+        { status: 500 }
+      )
+    }
+    
     const body = await request.json()
     const { logoUrl, primaryColor, secondaryColor, companyName } = body
 
@@ -103,9 +125,11 @@ export async function POST(request: Request) {
       message: 'Branding settings saved successfully'
     })
   } catch (error) {
-    console.error('Branding API error:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace'
+    console.error('[POST /api/branding] Error:', { message: errorMsg, stack: errorStack, error })
     return NextResponse.json(
-      { error: 'Failed to save branding settings', details: String(error) },
+      { error: 'Failed to save branding settings', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }
     )
   }

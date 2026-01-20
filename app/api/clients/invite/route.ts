@@ -14,7 +14,16 @@ export async function POST(request: Request) {
       )
     }
 
-    const { prisma } = await import('@/lib/prisma')
+    const prismaModule = await import('@/lib/prisma')
+    const prisma = prismaModule?.prisma
+    
+    if (!prisma) {
+      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
+      return NextResponse.json(
+        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
+        { status: 500 }
+      )
+    }
 
     const body = await request.json()
     const { clientId, email } = body
@@ -79,9 +88,11 @@ export async function POST(request: Request) {
       message: 'Client invite created successfully'
     })
   } catch (error) {
-    console.error('Create invite error:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace'
+    console.error('[POST /api/clients/invite] Error:', { message: errorMsg, stack: errorStack, error })
     return NextResponse.json(
-      { error: 'Failed to create invite', details: String(error) },
+      { error: 'Failed to create client invite', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }
     )
   }
@@ -99,7 +110,16 @@ export async function GET(request: Request) {
       )
     }
 
-    const { prisma } = await import('@/lib/prisma')
+    const prismaModule = await import('@/lib/prisma')
+    const prisma = prismaModule?.prisma
+    
+    if (!prisma) {
+      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
+      return NextResponse.json(
+        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
+        { status: 500 }
+      )
+    }
 
     const client = await prisma.client.findUnique({
       where: { inviteToken: token }
@@ -125,9 +145,11 @@ export async function GET(request: Request) {
       clientId: client.id
     })
   } catch (error) {
-    console.error('Verify invite error:', error)
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace'
+    console.error('[GET /api/clients/invite] Error:', { message: errorMsg, stack: errorStack, error })
     return NextResponse.json(
-      { error: 'Failed to verify invite', details: String(error) },
+      { error: 'Failed to verify invite', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }
     )
   }
