@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import crypto from 'crypto'
 
 export async function POST(request: Request) {
@@ -14,6 +13,8 @@ export async function POST(request: Request) {
         { status: 401 }
       )
     }
+
+    const { prisma } = await import('@/lib/prisma')
 
     const body = await request.json()
     const { clientId, email } = body
@@ -97,6 +98,8 @@ export async function GET(request: Request) {
         { status: 400 }
       )
     }
+
+    const { prisma } = await import('@/lib/prisma')
 
     const client = await prisma.client.findUnique({
       where: { inviteToken: token }

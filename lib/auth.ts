@@ -16,13 +16,23 @@ try {
   // Only import if we're server-side and have DATABASE_URL
   if (typeof window === 'undefined' && process.env.DATABASE_URL) {
     console.log('[AUTH] Attempting to load Prisma and Adapter...')
-    const prismaModule = require('./prisma')
-    prisma = prismaModule.prisma
-    console.log('[AUTH] Prisma loaded:', { hasPrisma: !!prisma, prismaType: typeof prisma })
+    try {
+      const prismaModule = require('@/lib/prisma')
+      prisma = prismaModule.prisma
+      console.log('[AUTH] Prisma loaded:', { hasPrisma: !!prisma, prismaType: typeof prisma })
+    } catch (prismaError: any) {
+      console.warn('[AUTH] Could not load Prisma:', prismaError?.message || 'Unknown error')
+      prisma = null
+    }
     
-    const adapterModule = require('@auth/prisma-adapter')
-    PrismaAdapter = adapterModule.PrismaAdapter
-    console.log('[AUTH] PrismaAdapter loaded:', { hasAdapter: !!PrismaAdapter })
+    try {
+      const adapterModule = require('@auth/prisma-adapter')
+      PrismaAdapter = adapterModule.PrismaAdapter
+      console.log('[AUTH] PrismaAdapter loaded:', { hasAdapter: !!PrismaAdapter })
+    } catch (adapterError: any) {
+      console.warn('[AUTH] Could not load PrismaAdapter:', adapterError?.message || 'Unknown error')
+      PrismaAdapter = null
+    }
     
     if (prisma && PrismaAdapter) {
       console.log('[AUTH] ✓ PrismaAdapter loaded successfully')
@@ -41,10 +51,6 @@ try {
   // This is fine - we'll fall back to JWT strategy
   const errorMsg = error instanceof Error ? error.message : 'Unknown'
   console.error('[AUTH] ✗ Prisma/Adapter not available, using JWT strategy:', errorMsg)
-  console.error('[AUTH] Error details:', error)
-  if (error.stack) {
-    console.error('[AUTH] Error stack:', error.stack)
-  }
 }
 
 // Use database adapter if DATABASE_URL is set and Prisma is available

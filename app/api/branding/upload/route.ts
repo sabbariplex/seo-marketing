@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
@@ -18,6 +17,7 @@ export async function POST(request: Request) {
     }
 
     // Get user from database
+    const { prisma } = await import('@/lib/prisma')
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -76,7 +76,8 @@ export async function POST(request: Request) {
     const logoUrl = `/uploads/logos/${filename}`
 
     // Update branding with logo URL
-    await prisma.branding.upsert({
+    const { prisma: updatePrisma } = await import('@/lib/prisma')
+    await updatePrisma.branding.upsert({
       where: { userId: user.id },
       update: { logoUrl },
       create: {

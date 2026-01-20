@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
 
 export async function GET() {
   try {
@@ -13,6 +12,8 @@ export async function GET() {
         { status: 401 }
       )
     }
+
+    const { prisma } = await import('@/lib/prisma')
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
         { status: 401 }
       )
     }
+
+    const { prisma } = await import('@/lib/prisma')
 
     const body = await request.json()
     const { name, email, website } = body
