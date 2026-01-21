@@ -1,17 +1,27 @@
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
+import { PrismaAdapter } from '@auth/prisma-adapter'
 
-// Conditionally import Prisma and adapter only when needed
+// Dynamically import Prisma to avoid build-time issues
 let prisma: any = null
-let PrismaAdapter: any = null
 
-// Skip Prisma adapter load - we're using JWT strategy
-// If DATABASE_URL is set, Prisma will be imported dynamically when needed in API routes
-
-// Use JWT strategy (Prisma will be loaded dynamically in API routes if needed)
-const useDatabase = false
-const adapterInstance = undefined
+// Initialize Prisma adapter synchronously using the Prisma proxy
+let adapterInstance: any = null
+try {
+  if (process.env.DATABASE_URL) {
+    // Import Prisma module - the proxy will initialize on first access
+    const prismaModule = require('@/lib/prisma')
+    prisma = prismaModule.prisma
+    
+    if (prisma) {
+      adapterInstance = PrismaAdapter(prisma)
+    }
+  }
+} catch (error) {
+  console.error('[AUTH] Failed to initialize Prisma adapter:', error)
+  adapterInstance = undefined
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: adapterInstance,
@@ -92,10 +102,14 @@ export const authOptions: NextAuthOptions = {
         session.user.name = user.name || session.user.name || null
         session.user.image = user.image || session.user.image || null
         
-        // Get tokens from Account table when using database strategy
-        // PrismaAdapter automatically saves tokens to Account table
-        if (useDatabase && prisma) {
-          try {
+        // Get tokens from Account table
+        try {
+          if (!prisma) {
+            const prismaModule = await import('@/lib/prisma')
+            prisma = prismaModule.prisma
+          }
+          
+          if (prisma) {
             const account = await prisma.account.findFirst({
               where: { userId: user.id, provider: 'google' },
             })
@@ -107,9 +121,9 @@ export const authOptions: NextAuthOptions = {
                 (session as any).refreshToken = account.refresh_token
               }
             }
-          } catch (error: any) {
-            console.error('[AUTH SESSION] Error fetching account tokens:', error.message)
           }
+        } catch (error: any) {
+          console.error('[AUTH SESSION] Error fetching account tokens:', error.message)
         }
       } else if (token) {
         // Fallback for JWT strategy (when database is not available)
@@ -137,37 +151,90 @@ export const authOptions: NextAuthOptions = {
     },
   },
   session: {
-    strategy: useDatabase ? 'database' : 'jwt',
+    strategy: 'database', // Use database strategy when adapter is available
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   events: {
     async signIn({ user, account, isNewUser }) {
-      // Verify user was saved to database and update name if missing
-      if (useDatabase && prisma) {
-        try {
-          const savedUser = await prisma.user.findUnique({
-            where: { email: user.email! }
+      // Ensure user is saved to database (works with both adapter and manual creation)
+      try {
+        // Get Prisma client
+        if (!prisma) {
+          const prismaModule = await import('@/lib/prisma')
+          prisma = prismaModule.prisma
+        }
+
+        if (prisma && user.email) {
+          // Try to find existing user
+          let savedUser = await prisma.user.findUnique({
+            where: { email: user.email }
           })
-          if (savedUser) {
-            // Update user name if it's missing but we have it from OAuth
-            if (!savedUser.name && user.name) {
-              await prisma.user.update({
-                where: { id: savedUser.id },
-                data: { name: user.name }
-              })
+
+          if (!savedUser) {
+            // Create user if doesn't exist
+            savedUser = await prisma.user.create({
+              data: {
+                email: user.email,
+                name: user.name || null,
+                image: user.image || null,
+                emailVerified: (user as any).emailVerified ? new Date((user as any).emailVerified) : null,
+                role: 'agency', // Default role
+              }
+            })
+          } else {
+            // Update user if exists but missing data
+            const updateData: any = {}
+            if (!savedUser.name && user.name) updateData.name = user.name
+            if (!savedUser.image && user.image) updateData.image = user.image
+            if (!savedUser.emailVerified && (user as any).emailVerified) {
+              updateData.emailVerified = new Date((user as any).emailVerified)
             }
-            
-            // Update user image if it's missing but we have it from OAuth
-            if (!savedUser.image && user.image) {
-              await prisma.user.update({
+
+            if (Object.keys(updateData).length > 0) {
+              savedUser = await prisma.user.update({
                 where: { id: savedUser.id },
-                data: { image: user.image }
+                data: updateData
               })
             }
           }
-        } catch (dbError: any) {
-          console.error('[AUTH EVENT] Error checking/updating database for user:', dbError.message)
+
+          // Save account if OAuth account exists
+          if (account && savedUser) {
+            await prisma.account.upsert({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                }
+              },
+              update: {
+                access_token: account.access_token || null,
+                refresh_token: account.refresh_token || null,
+                expires_at: account.expires_at || null,
+                token_type: account.token_type || null,
+                scope: account.scope || null,
+                id_token: account.id_token || null,
+                session_state: account.session_state || null,
+              },
+              create: {
+                userId: savedUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token || null,
+                refresh_token: account.refresh_token || null,
+                expires_at: account.expires_at || null,
+                token_type: account.token_type || null,
+                scope: account.scope || null,
+                id_token: account.id_token || null,
+                session_state: account.session_state || null,
+              }
+            })
+          }
         }
+      } catch (dbError: any) {
+        console.error('[AUTH EVENT] Error saving user to database:', dbError.message)
+        // Don't throw - allow sign in to continue even if DB save fails
       }
     },
   },
