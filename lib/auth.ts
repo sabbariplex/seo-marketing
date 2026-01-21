@@ -5,25 +5,21 @@ import { PrismaAdapter } from '@auth/prisma-adapter'
 
 // Dynamically import Prisma to avoid build-time issues
 let prisma: any = null
-
-// Initialize Prisma adapter synchronously using the Prisma proxy
 let adapterInstance: any = null
+
+// Initialize adapter - will be set to undefined if it fails (NextAuth will use JWT fallback)
+// The signIn event will still create users in the database
 try {
-  if (process.env.DATABASE_URL) {
-    // Import Prisma module - the proxy will initialize on first access
-    const prismaModule = require('@/lib/prisma')
-    prisma = prismaModule.prisma
-    
-    if (prisma) {
-      adapterInstance = PrismaAdapter(prisma)
-    }
-  }
+  // Don't initialize adapter at module load - let it fail gracefully
+  // Users will still be created via signIn event callback
+  adapterInstance = undefined
 } catch (error) {
-  console.error('[AUTH] Failed to initialize Prisma adapter:', error)
+  console.error('[AUTH] Adapter initialization skipped:', error)
   adapterInstance = undefined
 }
 
 export const authOptions: NextAuthOptions = {
+  // Use JWT strategy - users will be created in database via signIn event
   adapter: adapterInstance,
   providers: [
     // Credentials provider for testing/development (only when GOOGLE_CLIENT_ID is not set)
@@ -93,26 +89,45 @@ export const authOptions: NextAuthOptions = {
         return session
       }
 
-      // When using database adapter, user is available from DB
-      if (user) {
-        // Extend session.user with id property
-        const sessionUser = session.user as typeof session.user & { id?: string }
-        sessionUser.id = user.id
-        session.user.email = user.email || session.user.email || null
-        session.user.name = user.name || session.user.name || null
-        session.user.image = user.image || session.user.image || null
+      const tokenAny = token as any
+
+      // Populate user data from token (JWT strategy)
+      if (tokenAny.email) {
+        session.user.email = tokenAny.email
+      }
+      if (tokenAny.name) {
+        session.user.name = tokenAny.name
+      }
+      if (tokenAny.picture) {
+        session.user.image = tokenAny.picture
+      }
+
+      // Try to get user from database to get ID and tokens
+      try {
+        if (!prisma) {
+          const prismaModule = await import('@/lib/prisma')
+          prisma = prismaModule.prisma
+        }
         
-        // Get tokens from Account table
-        try {
-          if (!prisma) {
-            const prismaModule = await import('@/lib/prisma')
-            prisma = prismaModule.prisma
-          }
-          
-          if (prisma) {
+        if (prisma && tokenAny.email) {
+          // Fetch user from database
+          const dbUser = await prisma.user.findUnique({
+            where: { email: tokenAny.email }
+          })
+
+          if (dbUser) {
+            // Add user ID to session
+            const sessionUser = session.user as typeof session.user & { id?: string }
+            sessionUser.id = dbUser.id
+
+            // Get tokens from Account table
             const account = await prisma.account.findFirst({
-              where: { userId: user.id, provider: 'google' },
+              where: { 
+                userId: dbUser.id,
+                provider: 'google'
+              }
             })
+            
             if (account) {
               if (account.access_token) {
                 (session as any).accessToken = account.access_token
@@ -122,23 +137,10 @@ export const authOptions: NextAuthOptions = {
               }
             }
           }
-        } catch (error: any) {
-          console.error('[AUTH SESSION] Error fetching account tokens:', error.message)
         }
-      } else if (token) {
-        // Fallback for JWT strategy (when database is not available)
-        const tokenAny = token as any
-        // Ensure user data is populated
-        if (!session.user.email && tokenAny.email) {
-          session.user.email = tokenAny.email
-        }
-        if (!session.user.name && tokenAny.name) {
-          session.user.name = tokenAny.name
-        }
-        if (!session.user.image && tokenAny.picture) {
-          session.user.image = tokenAny.picture
-        }
-        // Add tokens from JWT
+      } catch (error: any) {
+        console.error('[AUTH SESSION] Error fetching user from database:', error.message)
+        // Fallback to tokens from JWT if database fetch fails
         if (tokenAny.accessToken) {
           (session as any).accessToken = tokenAny.accessToken
         }
@@ -151,7 +153,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   session: {
-    strategy: 'database', // Use database strategy when adapter is available
+    strategy: 'jwt', // Use JWT strategy - users still saved to DB via signIn event
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   events: {
