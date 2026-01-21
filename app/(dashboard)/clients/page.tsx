@@ -34,12 +34,25 @@ export default function ClientsPage() {
 
   const fetchClients = async () => {
     try {
-      const res = await fetch('/api/clients')
+      const res = await fetch('/api/clients', {
+        credentials: 'include'
+      })
       const data = await res.json()
-      setClients(data)
+      
+      // Check if response was successful and data is an array
+      if (!res.ok) {
+        console.error('API error:', data)
+        setClients([])
+      } else if (Array.isArray(data)) {
+        setClients(data)
+      } else {
+        console.error('Unexpected response format:', data)
+        setClients([])
+      }
       setLoading(false)
     } catch (err) {
       console.error('Failed to fetch clients:', err)
+      setClients([])
       setLoading(false)
     }
   }
@@ -50,6 +63,7 @@ export default function ClientsPage() {
       const res = await fetch('/api/clients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData)
       })
       if (res.ok) {
@@ -57,9 +71,13 @@ export default function ClientsPage() {
         setClients([...clients, newClient])
         setFormData({ name: '', email: '', website: '' })
         setShowAddForm(false)
+      } else {
+        const error = await res.json()
+        alert(`Failed to create client: ${error.error || 'Unknown error'}`)
       }
     } catch (err) {
       console.error('Failed to create client:', err)
+      alert(`Error: ${err instanceof Error ? err.message : 'Failed to create client'}`)
     }
   }
 
@@ -68,15 +86,19 @@ export default function ClientsPage() {
       const res = await fetch('/api/clients/invite', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ clientId, email })
       })
       if (res.ok) {
         const data = await res.json()
         setInviteLinks({ ...inviteLinks, [clientId]: data.inviteLink })
+      } else {
+        const error = await res.json()
+        alert(`Failed to create invite: ${error.error || 'Unknown error'}`)
       }
     } catch (err) {
       console.error('Failed to create invite:', err)
-      alert('Failed to create invite link')
+      alert(`Error: ${err instanceof Error ? err.message : 'Failed to create invite link'}`)
     }
   }
 

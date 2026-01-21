@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
 import { KPICard } from '@/components/dashboard/KPICard'
 import { MetricChart } from '@/components/dashboard/MetricChart'
 import { 
@@ -35,19 +34,33 @@ interface DashboardData {
 }
 
 export default function ClientDashboardPage() {
-  const { data: session } = useSession()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/client/dashboard')
-      .then(res => res.json())
+    fetch('/api/client/dashboard', {
+      credentials: 'include'
+    })
+      .then(res => {
+        if (!res.ok) {
+          console.error('API error:', res.status)
+          throw new Error(`API error: ${res.status}`)
+        }
+        return res.json()
+      })
       .then(data => {
-        setData(data)
+        // Ensure data is an object and not an error response
+        if (data && typeof data === 'object' && !data.error) {
+          setData(data)
+        } else {
+          console.error('Invalid data format:', data)
+          setData(null)
+        }
         setLoading(false)
       })
       .catch(err => {
         console.error('Failed to fetch dashboard data:', err)
+        setData(null)
         setLoading(false)
       })
   }, [])

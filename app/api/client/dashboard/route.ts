@@ -13,8 +13,44 @@ export async function GET() {
       )
     }
 
+    // Get user from database
+    const prisma = (await (import('@/lib/prisma') as any)).prisma
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: {
+        client: {
+          include: {
+            user: true
+          }
+        }
+      }
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    // Check if user is a client
+    if (user.role !== 'client' || !user.clientId) {
+      return NextResponse.json(
+        { error: 'Access denied. Client access required.' },
+        { status: 403 }
+      )
+    }
+
+    const client = user.client
+    if (!client) {
+      return NextResponse.json(
+        { error: 'Client record not found' },
+        { status: 404 }
+      )
+    }
+
     // Fetch client-specific data from database
-    // TODO: Implement actual data fetching from database
+    // For now, return empty data structure - can be extended with actual integrations
     const trafficData: any[] = []
     const conversionData: any[] = []
     const sourceData: any[] = []
@@ -52,7 +88,7 @@ export async function GET() {
     const conversionChange = previousConversions > 0 ? ((recentConversions - previousConversions) / previousConversions) * 100 : 0
 
     return NextResponse.json({
-      clientName: 'Your Company', // In production, fetch from database
+      clientName: client.name,
       kpis: {
         sessions: {
           value: totalSessions,

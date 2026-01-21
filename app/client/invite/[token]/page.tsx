@@ -18,8 +18,16 @@ export default function ClientInvitePage() {
 
   useEffect(() => {
     if (token) {
-      fetch(`/api/clients/invite?token=${token}`)
-        .then(res => res.json())
+      fetch(`/api/clients/invite?token=${token}`, {
+        credentials: 'include'
+      })
+        .then(res => {
+          if (!res.ok) {
+            console.error('API error:', res.status)
+            throw new Error(`API error: ${res.status}`)
+          }
+          return res.json()
+        })
         .then(data => {
           if (data.valid) {
             setValid(true)
@@ -30,6 +38,7 @@ export default function ClientInvitePage() {
           setLoading(false)
         })
         .catch(err => {
+          console.error('Error verifying invite:', err)
           setError('Failed to verify invite')
           setLoading(false)
         })

@@ -39,7 +39,6 @@ export default function SettingsPage() {
     
     if ((hasAuthParams || isFromOAuth) && !hasCheckedSession) {
       setHasCheckedSession(true)
-      console.log('Detected OAuth return, refreshing session...')
       
       // Refresh session multiple times with delays
       const refreshAttempts = [500, 1500, 3000]
@@ -48,11 +47,9 @@ export default function SettingsPage() {
       refreshAttempts.forEach(delay => {
         const timeout = setTimeout(async () => {
           try {
-            console.log(`Refreshing session (attempt after ${delay}ms)...`)
             const result = await update()
             // Check if we're now authenticated after update
             if (result) {
-              console.log('Session updated successfully!')
               // Clean URL if needed
               if (hasAuthParams) {
                 router.replace('/settings')
@@ -75,7 +72,6 @@ export default function SettingsPage() {
   useEffect(() => {
     const handleFocus = async () => {
       if (status === 'loading' || status === 'unauthenticated') {
-        console.log('Window focused, checking session...')
         await update()
       }
     }
@@ -88,7 +84,6 @@ export default function SettingsPage() {
   useEffect(() => {
     if (status === 'loading' && !hasCheckedSession) {
       const pollInterval = setInterval(async () => {
-        console.log('Polling for session update...')
         await update()
       }, 2000)
       
@@ -107,11 +102,6 @@ export default function SettingsPage() {
   // Monitor session status
   useEffect(() => {
     if (status === 'authenticated' && session) {
-      console.log('Session authenticated:', {
-        email: session.user?.email,
-        hasAccessToken: !!(session as any).accessToken,
-        hasRefreshToken: !!(session as any).refreshToken
-      })
       // Reset connecting state when authenticated
       setConnecting(false)
     }
@@ -124,13 +114,23 @@ export default function SettingsPage() {
   // Load branding settings
   useEffect(() => {
     if (status === 'authenticated') {
-      fetch('/api/branding')
-        .then(res => res.json())
+      fetch('/api/branding', {
+        credentials: 'include'
+      })
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`API error: ${res.status}`)
+          }
+          return res.json()
+        })
         .then(data => {
-          if (data.logoUrl) setLogoUrl(data.logoUrl)
-          if (data.primaryColor) setPrimaryColor(data.primaryColor)
-          if (data.secondaryColor) setSecondaryColor(data.secondaryColor)
-          if (data.companyName) setCompanyName(data.companyName)
+          // Check if response is an error object
+          if (data && !data.error) {
+            if (data.logoUrl) setLogoUrl(data.logoUrl)
+            if (data.primaryColor) setPrimaryColor(data.primaryColor)
+            if (data.secondaryColor) setSecondaryColor(data.secondaryColor)
+            if (data.companyName) setCompanyName(data.companyName)
+          }
         })
         .catch(err => console.error('Failed to load branding:', err))
     }
@@ -140,15 +140,10 @@ export default function SettingsPage() {
     setConnecting(true)
     setHasCheckedSession(false) // Reset to allow session check after redirect
     try {
-      const result = await signIn('google', { 
+      await signIn('google', { 
         callbackUrl: '/settings',
         redirect: true 
       })
-      // If redirect is false, manually handle
-      if (result?.error) {
-        console.error('Sign in error:', result.error)
-        setConnecting(false)
-      }
     } catch (error) {
       console.error('Connection error:', error)
       setConnecting(false)
@@ -164,6 +159,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch('/api/integrations/google-analytics/connect', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ propertyId })
       })
@@ -230,7 +226,6 @@ export default function SettingsPage() {
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    console.log('Manually refreshing session...')
                     await update()
                     window.location.reload()
                   }}
@@ -315,6 +310,7 @@ export default function SettingsPage() {
                         
                         const res = await fetch('/api/branding/upload', {
                           method: 'POST',
+                          credentials: 'include',
                           body: formData,
                         })
                         
@@ -327,7 +323,6 @@ export default function SettingsPage() {
                           alert(`Failed to upload logo: ${error.error}`)
                         }
                       } catch (error) {
-                        console.error('Upload error:', error)
                         alert('Failed to upload logo')
                       } finally {
                         setUploading(false)
@@ -398,6 +393,7 @@ export default function SettingsPage() {
                 const res = await fetch('/api/branding', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
                   body: JSON.stringify({
                     logoUrl,
                     primaryColor,
@@ -414,7 +410,6 @@ export default function SettingsPage() {
                   alert(`Failed to save settings: ${error.error}`)
                 }
               } catch (error) {
-                console.error('Save error:', error)
                 alert('Failed to save branding settings')
               } finally {
                 setSaving(false)

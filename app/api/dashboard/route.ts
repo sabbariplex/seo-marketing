@@ -140,8 +140,8 @@ export async function GET() {
             sourceData = realData.sourceData
             useRealData = true
           } catch (gaError) {
-            console.error('Failed to fetch Google Analytics data, using mock data:', gaError)
-            // Fall through to use mock data
+            console.error('Failed to fetch Google Analytics data:', gaError)
+            // Fall through to return empty data
           }
         }
       }

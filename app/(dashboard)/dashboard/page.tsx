@@ -37,14 +37,29 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/dashboard')
-      .then(res => res.json())
+    fetch('/api/dashboard', {
+      credentials: 'include'
+    })
+      .then(res => {
+        if (!res.ok) {
+          console.error('API error:', res.status)
+          throw new Error(`API error: ${res.status}`)
+        }
+        return res.json()
+      })
       .then(data => {
-        setData(data)
+        // Ensure data is an object and not an error response
+        if (data && typeof data === 'object' && !data.error) {
+          setData(data)
+        } else {
+          console.error('Invalid data format:', data)
+          setData(null)
+        }
         setLoading(false)
       })
       .catch(err => {
         console.error('Failed to fetch dashboard data:', err)
+        setData(null)
         setLoading(false)
       })
   }, [])

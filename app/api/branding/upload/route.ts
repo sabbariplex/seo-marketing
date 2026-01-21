@@ -17,17 +17,7 @@ export async function POST(request: Request) {
     }
 
     // Get user from database
-    const prismaModule = await import('@/lib/prisma')
-    const prisma = prismaModule?.prisma
-    
-    if (!prisma) {
-      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
-      return NextResponse.json(
-        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
-        { status: 500 }
-      )
-    }
-    
+    const prisma = (await (import('@/lib/prisma') as any)).prisma
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -86,17 +76,7 @@ export async function POST(request: Request) {
     const logoUrl = `/uploads/logos/${filename}`
 
     // Update branding with logo URL
-    const updatePrismaModule = await import('@/lib/prisma')
-    const updatePrisma = updatePrismaModule?.prisma
-    
-    if (!updatePrisma) {
-      console.error('[API] Prisma module invalid for update:', { hasModule: !!updatePrismaModule, hasPrisma: !!updatePrisma })
-      return NextResponse.json(
-        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
-        { status: 500 }
-      )
-    }
-    
+    const updatePrisma = (await (import('@/lib/prisma') as any)).prisma
     await updatePrisma.branding.upsert({
       where: { userId: user.id },
       update: { logoUrl },
@@ -114,7 +94,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     const errorStack = error instanceof Error ? error.stack : 'No stack trace'
-    console.error('[POST /api/branding/upload] Error:', { message: errorMsg, stack: errorStack, error })
+    console.error('[POST /api/branding/upload] Error:', errorMsg)
     return NextResponse.json(
       { error: 'Failed to upload logo', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }

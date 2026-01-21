@@ -14,17 +14,6 @@ export async function POST(request: Request) {
       )
     }
 
-    const prismaModule = await import('@/lib/prisma')
-    const prisma = prismaModule?.prisma
-    
-    if (!prisma) {
-      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
-      return NextResponse.json(
-        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
-        { status: 500 }
-      )
-    }
-
     const body = await request.json()
     const { clientId, email } = body
 
@@ -36,6 +25,7 @@ export async function POST(request: Request) {
     }
 
     // Get user from database
+    const prisma = (await (import('@/lib/prisma') as any)).prisma
     const user = await prisma.user.findUnique({
       where: { email: session.user.email }
     })
@@ -90,7 +80,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     const errorStack = error instanceof Error ? error.stack : 'No stack trace'
-    console.error('[POST /api/clients/invite] Error:', { message: errorMsg, stack: errorStack, error })
+    console.error('[POST /api/clients/invite] Error:', errorMsg)
     return NextResponse.json(
       { error: 'Failed to create client invite', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }
@@ -110,17 +100,7 @@ export async function GET(request: Request) {
       )
     }
 
-    const prismaModule = await import('@/lib/prisma')
-    const prisma = prismaModule?.prisma
-    
-    if (!prisma) {
-      console.error('[API] Prisma module invalid:', { hasModule: !!prismaModule, hasPrisma: !!prisma })
-      return NextResponse.json(
-        { error: 'Database client unavailable', details: 'Prisma module not loaded' },
-        { status: 500 }
-      )
-    }
-
+    const prisma = (await (import('@/lib/prisma') as any)).prisma
     const client = await prisma.client.findUnique({
       where: { inviteToken: token }
     })
@@ -147,7 +127,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error)
     const errorStack = error instanceof Error ? error.stack : 'No stack trace'
-    console.error('[GET /api/clients/invite] Error:', { message: errorMsg, stack: errorStack, error })
+    console.error('[GET /api/clients/invite] Error:', errorMsg)
     return NextResponse.json(
       { error: 'Failed to verify invite', details: errorMsg, stack: process.env.NODE_ENV === 'development' ? errorStack : undefined },
       { status: 500 }

@@ -6,20 +6,9 @@ export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     
-    // Debug logging
-    console.log('Session check:', {
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      email: session?.user?.email,
-      hasAccessToken: !!(session as any)?.accessToken,
-    })
-    
     if (!session?.user?.email) {
       return NextResponse.json(
-        { 
-          error: 'Unauthorized. Please sign in with Google first.',
-          debug: { hasSession: !!session, hasUser: !!session?.user }
-        },
+        { error: 'Unauthorized. Please sign in with Google first.' },
         { status: 401 }
       )
     }
@@ -39,15 +28,8 @@ export async function POST(request: Request) {
     const refreshToken = (session as any).refreshToken
 
     if (!accessToken) {
-      console.error('No access token in session:', {
-        email: session.user.email,
-        sessionKeys: Object.keys(session),
-      })
       return NextResponse.json(
-        { 
-          error: 'Google account not connected. Please sign in with Google first.',
-          debug: { hasAccessToken: false, sessionKeys: Object.keys(session) }
-        },
+        { error: 'Google account not connected. Please sign in with Google first.' },
         { status: 400 }
       )
     }
@@ -94,6 +76,7 @@ export async function POST(request: Request) {
       }
     } catch (prismaError) {
       console.error('Error loading Prisma:', prismaError)
+      // Continue without database
     }
 
     return NextResponse.json({ 

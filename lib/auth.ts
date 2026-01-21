@@ -1,97 +1,58 @@
 import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
+import CredentialsProvider from 'next-auth/providers/credentials'
 
 // Conditionally import Prisma and adapter only when needed
 let prisma: any = null
 let PrismaAdapter: any = null
 
-console.log('[AUTH] Initializing auth configuration...')
-console.log('[AUTH] Environment check:', {
-  isServer: typeof window === 'undefined',
-  hasDatabaseUrl: !!process.env.DATABASE_URL,
-  nodeEnv: process.env.NODE_ENV,
-})
+// Skip Prisma adapter load - we're using JWT strategy
+// If DATABASE_URL is set, Prisma will be imported dynamically when needed in API routes
 
-try {
-  // Only import if we're server-side and have DATABASE_URL
-  if (typeof window === 'undefined' && process.env.DATABASE_URL) {
-    console.log('[AUTH] Attempting to load Prisma and Adapter...')
-    try {
-      const prismaModule = require('@/lib/prisma')
-      prisma = prismaModule.prisma
-      console.log('[AUTH] Prisma loaded:', { hasPrisma: !!prisma, prismaType: typeof prisma })
-    } catch (prismaError: any) {
-      console.warn('[AUTH] Could not load Prisma:', prismaError?.message || 'Unknown error')
-      prisma = null
-    }
-    
-    try {
-      const adapterModule = require('@auth/prisma-adapter')
-      PrismaAdapter = adapterModule.PrismaAdapter
-      console.log('[AUTH] PrismaAdapter loaded:', { hasAdapter: !!PrismaAdapter })
-    } catch (adapterError: any) {
-      console.warn('[AUTH] Could not load PrismaAdapter:', adapterError?.message || 'Unknown error')
-      PrismaAdapter = null
-    }
-    
-    if (prisma && PrismaAdapter) {
-      console.log('[AUTH] ✓ PrismaAdapter loaded successfully')
-    } else {
-      console.warn('[AUTH] ⚠ PrismaAdapter not available - will use JWT strategy')
-      console.warn('[AUTH] Details:', { hasPrisma: !!prisma, hasAdapter: !!PrismaAdapter })
-    }
-  } else {
-    console.warn('[AUTH] ⚠ Skipping Prisma/Adapter load:', {
-      isServer: typeof window === 'undefined',
-      hasDatabaseUrl: !!process.env.DATABASE_URL,
-    })
-  }
-} catch (error: any) {
-  // Prisma not available (e.g., during build or missing dependencies)
-  // This is fine - we'll fall back to JWT strategy
-  const errorMsg = error instanceof Error ? error.message : 'Unknown'
-  console.error('[AUTH] ✗ Prisma/Adapter not available, using JWT strategy:', errorMsg)
-}
-
-// Use database adapter if DATABASE_URL is set and Prisma is available
-const useDatabase = !!process.env.DATABASE_URL && typeof window === 'undefined' && prisma && PrismaAdapter
-console.log('[AUTH] Database strategy decision:', {
-  useDatabase,
-  hasDatabaseUrl: !!process.env.DATABASE_URL,
-  isServer: typeof window === 'undefined',
-  hasPrisma: !!prisma,
-  hasAdapter: !!PrismaAdapter,
-})
-
-// Create adapter
-let adapterInstance: any = undefined
-if (useDatabase && prisma && PrismaAdapter) {
-  try {
-    console.log('[AUTH] Creating PrismaAdapter instance...')
-    adapterInstance = PrismaAdapter(prisma)
-    console.log('[AUTH] ✓ PrismaAdapter instance created successfully')
-  } catch (error: any) {
-    console.error('[AUTH] ✗ Failed to create PrismaAdapter:', error.message)
-    adapterInstance = undefined
-  }
-} else {
-  console.log('[AUTH] Using JWT strategy (no database adapter)')
-}
+// Use JWT strategy (Prisma will be loaded dynamically in API routes if needed)
+const useDatabase = false
+const adapterInstance = undefined
 
 export const authOptions: NextAuthOptions = {
   adapter: adapterInstance,
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-      authorization: {
-        params: {
-          scope: 'openid email profile https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
-          access_type: 'offline',
-          prompt: 'consent',
+    // Credentials provider for testing/development (only when GOOGLE_CLIENT_ID is not set)
+    ...((!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) ? [
+      CredentialsProvider({
+        name: 'Test Credentials',
+        credentials: {
+          email: { label: 'Email', type: 'email', placeholder: 'test@example.com' },
+          password: { label: 'Password', type: 'password' },
         },
-      },
-    }),
+        async authorize(credentials) {
+          // For development/testing only - accept any credentials
+          // In production, you should validate against your database
+          if (credentials?.email) {
+            return {
+              id: credentials.email.replace(/[^a-z0-9]/gi, '-'),
+              email: credentials.email,
+              name: credentials.email.split('@')[0],
+              image: null,
+            }
+          }
+          return null
+        },
+      }),
+    ] : []),
+    // Google provider (only if configured)
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET ? [
+      GoogleProvider({
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        authorization: {
+          params: {
+            scope: 'openid email profile https://www.googleapis.com/auth/analytics.readonly https://www.googleapis.com/auth/webmasters.readonly',
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      }),
+    ] : []),
   ],
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
@@ -117,29 +78,13 @@ export const authOptions: NextAuthOptions = {
       return token
     },
     async session({ session, token, user }) {
-      console.log('[AUTH SESSION] Session callback triggered')
-      console.log('[AUTH SESSION] Context:', {
-        hasUser: !!user,
-        hasToken: !!token,
-        hasSessionUser: !!session.user,
-        useDatabase,
-        hasPrisma: !!prisma,
-      })
-
       // Ensure session.user exists
       if (!session.user) {
-        console.warn('[AUTH SESSION] ⚠ Session.user is missing!')
         return session
       }
 
       // When using database adapter, user is available from DB
       if (user) {
-        console.log('[AUTH SESSION] Using database user:', {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        })
-        
         // Extend session.user with id property
         const sessionUser = session.user as typeof session.user & { id?: string }
         sessionUser.id = user.id
@@ -151,32 +96,22 @@ export const authOptions: NextAuthOptions = {
         // PrismaAdapter automatically saves tokens to Account table
         if (useDatabase && prisma) {
           try {
-            console.log('[AUTH SESSION] Fetching account tokens from database...')
             const account = await prisma.account.findFirst({
               where: { userId: user.id, provider: 'google' },
             })
             if (account) {
-              console.log('[AUTH SESSION] ✓ Account found in database')
               if (account.access_token) {
                 (session as any).accessToken = account.access_token
-                console.log('[AUTH SESSION] ✓ Access token added to session')
               }
               if (account.refresh_token) {
                 (session as any).refreshToken = account.refresh_token
-                console.log('[AUTH SESSION] ✓ Refresh token added to session')
               }
-            } else {
-              console.warn('[AUTH SESSION] ⚠ Account not found in database for user:', user.id)
             }
           } catch (error: any) {
-            console.error('[AUTH SESSION] ✗ Error fetching account tokens:', error.message)
-            console.error('[AUTH SESSION] Error stack:', error.stack)
+            console.error('[AUTH SESSION] Error fetching account tokens:', error.message)
           }
-        } else {
-          console.warn('[AUTH SESSION] ⚠ Cannot fetch tokens - database not available')
         }
       } else if (token) {
-        console.log('[AUTH SESSION] Using JWT token (no database user)')
         // Fallback for JWT strategy (when database is not available)
         const tokenAny = token as any
         // Ensure user data is populated
@@ -207,30 +142,6 @@ export const authOptions: NextAuthOptions = {
   },
   events: {
     async signIn({ user, account, isNewUser }) {
-      console.log('[AUTH EVENT] 🔐 SignIn event triggered')
-      console.log('[AUTH EVENT] User details:', {
-        email: user.email,
-        id: user.id,
-        name: user.name,
-        isNewUser,
-      })
-      console.log('[AUTH EVENT] Configuration:', {
-        useDatabase,
-        hasAdapter: !!authOptions.adapter,
-        adapterType: authOptions.adapter ? 'PrismaAdapter' : 'none',
-        strategy: useDatabase ? 'database' : 'jwt',
-        sessionStrategy: authOptions.session?.strategy,
-      })
-      
-      if (account) {
-        console.log('[AUTH EVENT] Account details:', {
-          provider: account.provider,
-          type: account.type,
-          hasAccessToken: !!account.access_token,
-          hasRefreshToken: !!account.refresh_token,
-        })
-      }
-      
       // Verify user was saved to database and update name if missing
       if (useDatabase && prisma) {
         try {
@@ -240,45 +151,23 @@ export const authOptions: NextAuthOptions = {
           if (savedUser) {
             // Update user name if it's missing but we have it from OAuth
             if (!savedUser.name && user.name) {
-              console.log('[AUTH EVENT] Updating user name in database...')
               await prisma.user.update({
                 where: { id: savedUser.id },
                 data: { name: user.name }
               })
-              console.log('[AUTH EVENT] ✅ User name updated in database')
             }
             
             // Update user image if it's missing but we have it from OAuth
             if (!savedUser.image && user.image) {
-              console.log('[AUTH EVENT] Updating user image in database...')
               await prisma.user.update({
                 where: { id: savedUser.id },
                 data: { image: user.image }
               })
-              console.log('[AUTH EVENT] ✅ User image updated in database')
             }
-            
-            console.log('[AUTH EVENT] ✅ User confirmed in database:', {
-              id: savedUser.id,
-              email: savedUser.email,
-              name: savedUser.name,
-              createdAt: savedUser.createdAt,
-            })
-          } else {
-            console.error('[AUTH EVENT] ✗ User not found in database after sign in!')
           }
         } catch (dbError: any) {
-          console.error('[AUTH EVENT] ✗ Error checking/updating database for user:', dbError.message)
+          console.error('[AUTH EVENT] Error checking/updating database for user:', dbError.message)
         }
-      } else if (isNewUser && !useDatabase) {
-        console.warn('[AUTH EVENT] ⚠ New user but database not available - using JWT strategy')
-        console.warn('[AUTH EVENT] User will NOT be saved to database')
-      }
-    },
-    async session({ session }) {
-      // Log session creation for debugging
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Session created for:', session.user?.email)
       }
     },
   },
